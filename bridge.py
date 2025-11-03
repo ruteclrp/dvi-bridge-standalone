@@ -9,7 +9,7 @@ import time
 import threading
 import warnings
 
-load_dotenv("/home/lrp/.env")  # this will read .env in the current directory
+load_dotenv()  # this will read .env in the current directory
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Modbus setup
@@ -33,21 +33,30 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 # MQTT setup
 mqtt_client = mqtt.Client()
 mqtt_client.username_pw_set(MQTT_USER, MQTT_PASS)
+
+def on_connect(client, userdata, flags, rc):
+    if rc == 0:
+        print("✅ Connected to MQTT broker")
+        for t in command_map:
+            client.subscribe(t)
+    else:
+        print(f"❌ MQTT connection failed with code {rc}")
+
 mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
 
 # Coil mapping (coil 13 omitted)
 coil_names = {
     0: "Soft starter Compressor",
-    1: "3-vay shunt VV open/close",
+    1: "3-Way shunt VV open/close",
     2: "Start/stop expansion valve",
     3: "Heating element",
     4: "Circ. pump warm side",
     5: "El-tracing CV/drain",
-    8: "4-vay valve defrost",
-    9: "liquid injection solenoid valve",
+    8: "4-way valve defrost",
+    9: "Liquid injection solenoid valve",
     10: "3-way shunt CV open",
     11: "3-way shunt CV close",
-    12: "Circ. pumpe CV",
+    12: "Circ. pump CV",
     14: "Sum alarm failure"
 }
 
@@ -77,7 +86,7 @@ def read_coils():
         bitmask = (response[2] << 8) | response[1]
         bits = [(bitmask >> i) & 1 for i in range(16)]
 
-        return {coil_names[i]: bits[i] for i in coil_names}
+        return dict(sorted({coil_names[i]: bits[i] for i in coil_names}.items()))
     except Exception as e:
         print(f"FC01 read failed: {e}")
         return {}
@@ -126,8 +135,6 @@ def on_message(client, userdata, msg):
         print(f"❌ Command handling failed for {msg.topic}: {e}")
 
 mqtt_client.on_message = on_message
-for t in command_map:
-    mqtt_client.subscribe(t)
 
 # Timers and persistent cache
 last_coil_update = 0
@@ -138,6 +145,9 @@ last_coils = {}
 last_inputs = {}
 last_writes = {}
 last_published = None
+
+mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
+mqtt_client.loop_start()
 
 # Main loop
 while True:
@@ -223,5 +233,4 @@ while True:
 #        print("📡 Published:", json.dumps(full_payload, indent=2))
         last_published = full_payload
 
-    mqtt_client.loop()
     time.sleep(1)

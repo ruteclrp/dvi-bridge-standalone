@@ -76,6 +76,28 @@ def publish_discovery_binary(name, unique_id, coil_key, device_class=None):
     if device_class: payload["device_class"] = device_class
     mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
 
+def publish_discovery_number(name, unique_id, command_topic, state_template,
+                             min_val=0, max_val=100, step=1, unit=None):
+    config_topic = f"homeassistant/number/{unique_id}/config"
+    payload = {
+        "name": name,
+        "command_topic": command_topic,
+        "state_topic": "dvi/measurement",
+        "value_template": state_template,
+        "unique_id": unique_id,
+        "min": min_val,
+        "max": max_val,
+        "step": step,
+        "device": {
+            "name": "DVI LV12",
+            "identifiers": ["dvi_lv12"],
+            "manufacturer": "DVI",
+            "model": "LV12 Heatpump"
+        }
+    }
+    if unit: payload["unit_of_measurement"] = unit
+    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
 # Coil mapping (coil 13 omitted)
 coil_names = {
     0: "Soft starter Compressor",
@@ -231,6 +253,39 @@ for reg, label in {
         unique_id=uid,
         value_template=f"{{{{ value_json.write_registers['{label}'] }}}}"
     )
+
+# Command map -> numbers/selects
+for topic, cfg in command_map.items():
+    reg = cfg["register"]
+    label = topic.split("/")[-1]  # e.g. "vvstate"
+    uid = f"dvi_lv12_cmd_{label}"
+
+    # Simple heuristic: treat *_state as select, others as number
+    if label.endswith("state"):
+        config_topic = f"homeassistant/select/{uid}/config"
+        payload = {
+            "name": label,
+            "command_topic": topic,
+            "state_topic": "dvi/measurement",
+            "value_template": f"{{{{ value_json.write_registers['{label}'] }}}}",
+            "options": ["0", "1"],  # adjust if more states exist
+            "unique_id": uid,
+            "device": {
+                "name": "DVI LV12",
+                "identifiers": ["dvi_lv12"],
+                "manufacturer": "DVI",
+                "model": "LV12 Heatpump"
+            }
+        }
+        mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+    else:
+        publish_discovery_number(
+            name=label,
+            unique_id=uid,
+            command_topic=topic,
+            state_template=f"{{{{ value_json.write_registers['{label}'] }}}}",
+            min_val=0, max_val=100, step=1
+        )
 
 # Main loop
 while True:

@@ -44,6 +44,69 @@ def on_connect(client, userdata, flags, rc):
 
 mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
 
+def publish_discovery_sensor(name, unique_id, value_template,
+                             unit=None, device_class=None, state_class=None):
+    config_topic = f"homeassistant/sensor/{unique_id}/config"
+    payload = {
+        "name": name,
+        "state_topic": "dvi/measurement",
+        "value_template": value_template,
+        "unique_id": unique_id,
+        "device": {
+            "name": "DVI LV12",
+            "identifiers": ["dvi_lv12"],
+            "manufacturer": "DVI",
+            "model": "LV12 Heatpump"
+        }
+    }
+    if unit: payload["unit_of_measurement"] = unit
+    if device_class: payload["device_class"] = device_class
+    if state_class: payload["state_class"] = state_class
+    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
+
+def publish_discovery_binary(name, unique_id, coil_key, device_class=None):
+    config_topic = f"homeassistant/binary_sensor/{unique_id}/config"
+    value_template = (
+        f"{{{{ 'ON' if value_json.coils['{coil_key}'] == 1 else 'OFF' }}}}"
+    )
+    payload = {
+        "name": name,
+        "state_topic": "dvi/measurement",
+        "value_template": value_template,
+        "unique_id": unique_id,
+        "device": {
+            "name": "DVI LV12",
+            "identifiers": ["dvi_lv12"],
+            "manufacturer": "DVI",
+            "model": "LV12 Heatpump"
+        }
+    }
+    if device_class: payload["device_class"] = device_class
+    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
+def publish_discovery_number(name, unique_id, command_topic, state_template,
+                             min_val=0, max_val=100, step=1, unit=None):
+    config_topic = f"homeassistant/number/{unique_id}/config"
+    payload = {
+        "name": name,
+        "command_topic": command_topic,
+        "state_topic": "dvi/measurement",
+        "value_template": state_template,
+        "unique_id": unique_id,
+        "min": min_val,
+        "max": max_val,
+        "step": step,
+        "device": {
+            "name": "DVI LV12",
+            "identifiers": ["dvi_lv12"],
+            "manufacturer": "DVI",
+            "model": "LV12 Heatpump"
+        }
+    }
+    if unit: payload["unit_of_measurement"] = unit
+    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
 # Coil mapping (coil 13 omitted)
 coil_names = {
     0: "Soft starter Compressor",

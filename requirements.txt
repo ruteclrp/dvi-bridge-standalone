@@ -1,2 +1,3 @@
 minimalmodbus
 paho-mqtt
+python-dotenv

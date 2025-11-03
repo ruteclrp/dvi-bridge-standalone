@@ -35,6 +35,47 @@ mqtt_client = mqtt.Client()
 mqtt_client.username_pw_set(MQTT_USER, MQTT_PASS)
 mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
 
+def publish_discovery_sensor(name, unique_id, value_template,
+                             unit=None, device_class=None, state_class=None):
+    config_topic = f"homeassistant/sensor/{unique_id}/config"
+    payload = {
+        "name": name,
+        "state_topic": "dvi/measurement",
+        "value_template": value_template,
+        "unique_id": unique_id,
+        "device": {
+            "name": "DVI LV12",
+            "identifiers": ["dvi_lv12"],
+            "manufacturer": "DVI",
+            "model": "LV12 Heatpump"
+        }
+    }
+    if unit: payload["unit_of_measurement"] = unit
+    if device_class: payload["device_class"] = device_class
+    if state_class: payload["state_class"] = state_class
+    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
+
+def publish_discovery_binary(name, unique_id, coil_key, device_class=None):
+    config_topic = f"homeassistant/binary_sensor/{unique_id}/config"
+    value_template = (
+        f"{{{{ 'ON' if value_json.coils['{coil_key}'] == 1 else 'OFF' }}}}"
+    )
+    payload = {
+        "name": name,
+        "state_topic": "dvi/measurement",
+        "value_template": value_template,
+        "unique_id": unique_id,
+        "device": {
+            "name": "DVI LV12",
+            "identifiers": ["dvi_lv12"],
+            "manufacturer": "DVI",
+            "model": "LV12 Heatpump"
+        }
+    }
+    if device_class: payload["device_class"] = device_class
+    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
 # Coil mapping (coil 13 omitted)
 coil_names = {
     0: "Soft starter Compressor",
@@ -138,6 +179,58 @@ last_coils = {}
 last_inputs = {}
 last_writes = {}
 last_published = None
+
+# --- Auto-discovery publishing ---
+# Coils -> binary_sensors
+for idx, coil_name in coil_names.items():
+    uid = f"dvi_lv12_coil_{idx}"
+    publish_discovery_binary(coil_name, uid, coil_name, device_class="power")
+
+# FC04 input registers -> sensors
+for key, label in fc04_labels.items():
+    uid = f"dvi_lv12_{key}"
+    publish_discovery_sensor(
+        name=label,
+        unique_id=uid,
+        value_template=f"{{{{ value_json.input_registers['{label}'] | float }}}}",
+        unit="°C",
+        device_class="temperature",
+        state_class="measurement"
+    )
+
+# EM23 extras
+publish_discovery_sensor(
+    "EM23 Power", "dvi_lv12_em23_power",
+    "{{ value_json.input_registers['em23_power'] | float }}",
+    unit="kW", device_class="power", state_class="measurement"
+)
+publish_discovery_sensor(
+    "EM23 Energy", "dvi_lv12_em23_energy",
+    "{{ value_json.input_registers['em23_energy'] | float }}",
+    unit="kWh", device_class="energy", state_class="total_increasing"
+)
+
+# FC06 dummy reads -> sensors
+for reg, label in {
+    0x01: "cv_mode",
+    0x02: "cv_curve",
+    0x03: "cv_setpoint",
+    0x04: "cv_night_setback",
+    0x0A: "vv_mode",
+    0x0B: "vv_setpoint",
+    0x0C: "vv_schedule",
+    0x0F: "aux_heating",
+    0xA1: "comp_hours",
+    0xA2: "vv_hours",
+    0xA3: "heating_hours",
+    0xD0: "curve_temp"
+}.items():
+    uid = f"dvi_lv12_fc06_{label}"
+    publish_discovery_sensor(
+        name=label,
+        unique_id=uid,
+        value_template=f"{{{{ value_json.write_registers['{label}'] }}}}"
+    )
 
 # Main loop
 while True:

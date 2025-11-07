@@ -1,6 +1,7 @@
 [Unit]
 Description=DVI Modbus-MQTT Bridge
 After=network.target
+Wants=network-online.target
 
 [Service]
 ExecStart=/home/<user>/dvi-bridge-standalone/venv/bin/python /home/<user>/dvi-bridge-standalone/bridge.py

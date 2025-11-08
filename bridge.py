@@ -8,6 +8,9 @@ import json
 import time
 import threading
 import warnings
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 load_dotenv()  # this will read .env in the current directory
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -32,6 +35,7 @@ MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 
 # MQTT setup
 mqtt_client = mqtt.Client()
+mqtt_client.enable_logger(logger)
 mqtt_client.reconnect_delay_set(min_delay=1, max_delay=120)
 mqtt_client.username_pw_set(MQTT_USER, MQTT_PASS)
 
@@ -63,7 +67,11 @@ def publish_discovery_sensor(name, unique_id, value_template,
     if unit: payload["unit_of_measurement"] = unit
     if device_class: payload["device_class"] = device_class
     if state_class: payload["state_class"] = state_class
-    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+#    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+    msg = json.dumps(payload)
+    mqtt_client.publish(config_topic, msg, retain=True)
+#    print(f"[DISCOVERY] Published to {config_topic}: {msg}")
+
 
 
 def publish_discovery_binary(name, unique_id, coil_key, device_class=None):
@@ -98,6 +106,7 @@ def publish_discovery_number(name, unique_id, command_topic, state_template,
         "min": min_val,
         "max": max_val,
         "step": step,
+        "mode": "box",
         "device": {
             "name": "DVI LV12",
             "identifiers": ["dvi_lv12"],
@@ -107,6 +116,26 @@ def publish_discovery_number(name, unique_id, command_topic, state_template,
     }
     if unit: payload["unit_of_measurement"] = unit
     mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
+def publish_discovery_select(name, unique_id, command_topic, state_template, options):
+    config_topic = f"homeassistant/select/{unique_id}/config"
+    payload = {
+        "name": name,
+        "command_topic": command_topic,
+        "state_topic": "dvi/measurement",
+        "value_template": state_template,
+        "unique_id": unique_id,
+        "options": options,
+        "device": {
+            "name": "DVI LV12",
+            "identifiers": ["dvi_lv12"],
+            "manufacturer": "DVI",
+            "model": "LV12 Heatpump"
+        }
+    }
+    msg = json.dumps(payload)
+    mqtt_client.publish(config_topic, msg, retain=True)
+    print(f"[DISCOVERY] Select {name} -> {config_topic}: {msg}")
 
 # Coil mapping (coil 13 omitted)
 coil_names = {
@@ -212,6 +241,131 @@ last_published = None
 
 mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
 mqtt_client.loop_start()
+
+# --- Auto-generate discovery configs once at startup ---
+
+# Coils -> binary_sensors
+for idx, label in coil_names.items():
+    publish_discovery_binary(
+        name=label,
+        unique_id=f"dvi_coil_{idx}",
+        coil_key=label
+    )
+
+# FC04 sensors -> temperature sensors
+for key, label in fc04_labels.items():
+    publish_discovery_sensor(
+        name=label,
+        unique_id=f"dvi_fc04_{key}",
+        value_template=f"{{{{ value_json.input_registers['{label}'] }}}}",
+        unit="°C",
+        device_class="temperature",
+        state_class="measurement"
+    )
+
+# Special FC04 cases
+publish_discovery_sensor(
+    name="em23_power",
+    unique_id="dvi_fc04_power",
+    value_template="{{ value_json.input_registers['em23_power'] }}",
+    unit="W",
+    device_class="power",
+    state_class="measurement"
+)
+publish_discovery_sensor(
+    name="em23_energy",
+    unique_id="dvi_fc04_energy",
+    value_template="{{ value_json.input_registers['em23_energy'] }}",
+    unit="kWh",
+    device_class="energy",
+    state_class="total_increasing"
+)
+
+# --- FC06 registers discovery ---
+
+mode_options = {
+    "cv_mode": ["Off", "Heating", "Cooling"],
+    "vv_mode": ["Off", "Domestic Hot Water", "Heating"],
+    "aux_heating": ["Disabled", "Enabled"]
+}
+
+fc06_registers = {
+    0x01: "cv_mode",
+    0x02: "cv_curve",
+    0x03: "cv_setpoint",
+    0x04: "cv_night_setback",
+    0x0A: "vv_mode",
+    0x0B: "vv_setpoint",
+    0x0C: "vv_schedule",
+    0x0F: "aux_heating",
+    0xA1: "comp_hours",
+    0xA2: "vv_hours",
+    0xA3: "heating_hours",
+    0xD0: "curve_temp"
+}
+
+for reg, label in fc06_registers.items():
+    # Mode registers -> Selects
+    if label in mode_options:
+        # Map to correct command topic from command_map
+        cmd_topic = {
+            "cv_mode": "dvi/command/cvstate",
+            "vv_mode": "dvi/command/vvstate",
+            "aux_heating": "dvi/command/tvstate"
+        }[label]
+
+        publish_discovery_select(
+            name=label,
+            unique_id=f"dvi_fc06_{label}",
+            command_topic=cmd_topic,
+            state_template=f"{{{{ value_json.write_registers['{label}'] }}}}",
+            options=mode_options[label]
+        )
+
+    # Numeric writable registers -> Numbers
+    elif label == "cv_curve":
+        publish_discovery_number(
+            name=label,
+            unique_id=f"dvi_fc06_{label}",
+            command_topic="dvi/command/cvcurve",
+            state_template=f"{{{{ value_json.write_registers['{label}'] }}}}",
+            min_val=1,
+            max_val=20,
+            step=1
+        )
+
+    elif label == "vv_setpoint":
+        publish_discovery_number(
+            name=label,
+            unique_id=f"dvi_fc06_{label}",
+            command_topic="dvi/command/vvsetpoint",
+            state_template=f"{{{{ value_json.write_registers['{label}'] }}}}",
+            min_val=10,
+            max_val=60,
+            step=1,
+            unit="°C"
+        )
+
+    elif label == "cv_setpoint":
+        # Read-only -> Sensor
+        publish_discovery_sensor(
+            name=label,
+            unique_id=f"dvi_fc06_{label}",
+            value_template=f"{{{{ value_json.write_registers['{label}'] }}}}",
+            unit="°C",
+            device_class="temperature",
+            state_class="measurement"
+        )
+
+    # Read-only registers -> Sensors
+    else:
+        publish_discovery_sensor(
+            name=label,
+            unique_id=f"dvi_fc06_{label}",
+            value_template=f"{{{{ value_json.write_registers['{label}'] }}}}",
+            state_class="measurement"
+        )
+
 
 # Main loop
 while True:

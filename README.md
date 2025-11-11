@@ -5,6 +5,8 @@ Python bridge for DVI heatpump to run on RPi connected via USB
 1. Install a Raspberry Pi OS Lite (64-bit) with the Raspberry Pi Imager application.
 2. Enable SSH if you wish to be able to remotely manage the RPi
 3. update the machine and install the packages in the requirements file
+4. create the .env file with your own environment settings
+5. create the deamon to run the bridge.py as a service
 
 ## Auto-start with systemd
 Copy the service file:

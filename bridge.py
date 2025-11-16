@@ -335,7 +335,7 @@ publish_discovery_sensor(
 fc06_registers = {
     0x01: "cv_mode",
     0x02: "cv_curve",
-    0x03: "cv_setpoint",
+#    0x03: "cv_setpoint",
     0x04: "cv_night",
     0x0A: "vv_mode",
     0x0B: "vv_setpoint",
@@ -450,7 +450,7 @@ for reg, label in fc06_registers.items():
             state_class="measurement"
         )
 
-   # special case fc06  long term statestics sensors
+#    special case fc06  long term statestics sensors
     elif label in special_fc06:
         cfg = special_fc06[label]
         publish_discovery_sensor(
@@ -471,89 +471,119 @@ for reg, label in fc06_registers.items():
             state_class="measurement"
         )
 
+fc04_fast = [
+    (0x01, "CV Forward"),
+    (0x02, "CV Return"),
+    (0x03, "Storage tank VV"),
+    (0x05, "Storage tank CV"),
+    (0x06, "Evaporator"),
+    (0x07, "Outdoor"),
+    (0x0B, "Compressor HP"),
+    (0x0C, "Compressor LP"),
+    (0x24, "em23_power"),
+]
+fc04_index = 0
 
-# Main loop
+fc06_priority = [
+    0xD0,  # curve_temp (high)
+    0x02,  # cv_curve
+    0x01,  # cv_mode
+    0x0A,  # vv_mode
+    0x0B,  # vv_setpoint
+    0x04,  # cv_night
+    0x0C,  # vv_schedule
+    0x0F,  # aux_heating
+    0xA1,  # comp_hours
+    0xA2,  # vv_hours
+    0xA3,  # heating_hours
+    0x33,  # curve_set_-12
+    0x34,  # curve_set_12
+]
+fc06_index = 0
+
+beat = 1
+heartbeat = 3.0
+beat_counter = 0  # counts total beats for energy insertion
+
 while True:
-    now = time.time()
+    with modbus_lock:
+        if beat == 1:
+            # FC01 + 2 FC04
+            coils = read_coils()
+            last_coils = dict(sorted(coils.items()))
+            for _ in range(2):
+                reg, label = fc04_fast[fc04_index]
+                val = read_input(reg)
+                if val is not None:
+                    last_inputs[label] = round(val * 0.1, 1) if reg != 0x24 else round(val * 0.0001, 4)
+                fc04_index = (fc04_index + 1) % len(fc04_fast)
 
-    # Coils every 13s
-    if now - last_coil_update >= 13:
-        coils = read_coils()
-        last_coils = dict(sorted(coils.items()))
-        last_coil_update = now
+        elif beat in (2, 3, 4):
+            # 2 FC04 + 1 FC06
+            for _ in range(2):
+                reg, label = fc04_fast[fc04_index]
+                val = read_input(reg)
+                if val is not None:
+                    last_inputs[label] = round(val * 0.1, 1) if reg != 0x24 else round(val * 0.0001, 4)
+                fc04_index = (fc04_index + 1) % len(fc04_fast)
 
-    # FC04 sensors every 17s
-    if now - last_fc04_update >= 17:
-        fc04_raw = {}
-        for reg in range(0x01, 0x0F):
+            # Decide whether to insert em23_energy instead of FC06
+            if beat_counter % 40 == 0:  # every 40 beats ≈ 2 min
+                msw = read_input(0x25)
+                lsw = read_input(0x26)
+                if msw is not None and lsw is not None:
+                    raw_energy = (msw << 16) + lsw
+                    last_inputs["em23_energy"] = round(raw_energy * 0.1, 1)
+            else:
+                reg = fc06_priority[fc06_index]
+                val = read_via_fc06(reg)
+                if val is not None:
+                    if reg == 0xD0:
+                        last_writes["curve_temp"] = round(val * 0.1, 1)
+                    else:
+                        label = fc06_registers.get(reg, f"reg_{reg:02X}")
+                        last_writes[label] = val
+                fc06_index = (fc06_index + 1) % len(fc06_priority)
+
+        elif beat == 5:
+            # FC01 + 1 FC04 + 1 FC06
+            coils = read_coils()
+            last_coils = dict(sorted(coils.items()))
+            reg, label = fc04_fast[fc04_index]
             val = read_input(reg)
             if val is not None:
-                fc04_raw[f"sensor_{reg}"] = val
+                last_inputs[label] = round(val * 0.1, 1) if reg != 0x24 else round(val * 0.0001, 4)
+            fc04_index = (fc04_index + 1) % len(fc04_fast)
 
-        for key, raw in fc04_raw.items():
-            if key in omit_fc04:
-                continue
-            label = fc04_labels.get(key, key)
-            last_inputs[label] = round(raw * 0.1, 1)
+            # Decide whether to insert em23_energy instead of FC06
+            if beat_counter % 40 == 0:
+                msw = read_input(0x25)
+                lsw = read_input(0x26)
+                if msw is not None and lsw is not None:
+                    raw_energy = (msw << 16) + lsw
+                    last_inputs["em23_energy"] = round(raw_energy * 0.1, 1)
+            else:
+                reg = fc06_priority[fc06_index]
+                val = read_via_fc06(reg)
+                if val is not None:
+                    if reg == 0xD0:
+                        last_writes["curve_temp"] = round(val * 0.1, 1)
+                    else:
+                        label = fc06_registers.get(reg, f"reg_{reg:02X}")
+                        last_writes[label] = val
+                fc06_index = (fc06_index + 1) % len(fc06_priority)
 
-        # EM23 power (FC04)
-        power = read_input(0x24)
-        if power is not None:
-            last_inputs["em23_power"] = round(power * 0.0001, 4)
-
-        last_fc04_update = now
-
-    # EM23 energy + curve temp + FC06 dummy reads every 60s
-    if now - last_misc_update >= 60:
-        msw = read_input(0x25)
-        lsw = read_input(0x26)
-        if msw is not None and lsw is not None:
-            raw_energy = (msw << 16) + lsw
-            last_inputs["em23_energy"] = round(raw_energy * 0.1, 1)
-
-        # FC06 dummy reads
-        fc06_registers = {
-            0x01: "cv_mode",
-            0x02: "cv_curve",
-            0x03: "cv_setpoint",
-            0x04: "cv_night",
-            0x0A: "vv_mode",
-            0x0B: "vv_setpoint",
-            0x0C: "vv_schedule",
-            0x0F: "aux_heating",
-            0xA1: "comp_hours",
-            0xA2: "vv_hours",
-            0xA3: "heating_hours",
-            0xD0: "curve_temp"
-        }
-
-        # Define adjustments: reg -> (multiplier, decimals)
-        fc06_adjustments = {
-            0xD0: (0.1, 1),   # curve_temp
-        }
-
-        for reg, label in fc06_registers.items():
-            val = read_via_fc06(reg)
-            if val is not None:
-                if reg in fc06_adjustments:
-                    mult, decimals = fc06_adjustments[reg]
-                    last_writes[label] = round(val * mult, decimals)
-                else:
-                    last_writes[label] = val
-
-        last_misc_update = now
-
-    # Final payload from cached values
+    # Publish payload if changed
     full_payload = {
         "coils": last_coils,
         "input_registers": dict(sorted(last_inputs.items())),
         "write_registers": dict(sorted(last_writes.items()))
     }
-
-    # Only publish if payload changed
     if full_payload != last_published:
         mqtt_client.publish("dvi/measurement", json.dumps(full_payload))
-#        print("📡 Published:", json.dumps(full_payload, indent=2))
         last_published = full_payload
 
-    time.sleep(1)
+    beat = (beat % 5) + 1
+    beat_counter += 1
+    time.sleep(heartbeat)
+

@@ -66,6 +66,54 @@ export function buildDiagramView({ hass, config, imageBase }) {
 	const vvSchedule = config.vv_schedule ? getState(config.vv_schedule) : null;
 	const auxHeating = config.aux_heating ? getState(config.aux_heating) : null;
 
+	// heating element sensor used when aux select = "Automatic"
+	const heatingElementState = getState("binary_sensor.dvi_lv12_heating_element");
+
+	// circulation pump sensor used to show/hide CV pump & CV flow gifs
+	const circPumpSensorState = getState("binary_sensor.dvi_lv12_circ_pump_cv");
+    
+	// Build aux icon HTML according to rules:
+	// - "Off" -> don't show
+	// - "On" -> always yellow
+	// - "Automatic" -> yellow when heatingElementState indicates active ("1"/"on"/"true"), otherwise inactive color
+	let auxDiagramIconHtml = "";
+	let auxChipIconHtml = "";
+	if (auxHeating) {
+		const auxNorm = String(auxHeating).toLowerCase();
+		if (auxNorm === "off") {
+			// both empty -> nothing shown
+			auxDiagramIconHtml = "";
+			auxChipIconHtml = "";
+		} else {
+			// compute color based on mode and heating element sensor (same logic for both)
+			let color = "var(--disabled-text-color)";
+			if (auxNorm === "on") {
+				color = "var(--warning-color, #fdd835)";
+			} else if (auxNorm === "automatic") {
+				const heatingActive = heatingElementState && (heatingElementState.toLowerCase() === "on");
+				color = heatingActive ? "var(--warning-color, #fdd835)" : "var(--disabled-text-color)";
+			} else {
+				// fallback keep disabled color
+				color = "var(--disabled-text-color)";
+			}
+
+			// diagram icon: must keep diagram-element so it is placed on the diagram
+			auxDiagramIconHtml = `<ha-icon
+				class="diagram-element icon-aux"
+				data-icon-key="aux"
+				style="color:${color};"
+				icon="mdi:lightning-bolt-outline">
+			</ha-icon>`;
+
+			// chip icon: do NOT include diagram-element; give a chip-specific class so it flows inside the chip
+			auxChipIconHtml = `<ha-icon
+				class="icon-aux chip-icon"
+				style="color:${color};"
+				icon="mdi:lightning-bolt-outline">
+			</ha-icon>`;
+		}
+	}
+
 	const outdoor = config.outdoor_temp ? getState(config.outdoor_temp) : null;
 	const curveTemp = config.curve_temp ? getState(config.curve_temp) : null;
 	const tankCv = config.storage_tank_cv ? getState(config.storage_tank_cv) : null;
@@ -147,7 +195,7 @@ export function buildDiagramView({ hass, config, imageBase }) {
     ${"" /* heat-curve label moved into bottom chip */}
 
     ${
-			evapTemp !== null
+			evapTemp !== null && compState === "on"
 				? `<div class="diagram-label label-evaporator" data-key="evap">${valueWithUnit(
 						"evap",
 						evapTemp,
@@ -156,13 +204,13 @@ export function buildDiagramView({ hass, config, imageBase }) {
 		}
 
     ${
-			hpTemp !== null
+			hpTemp !== null && compState === "on"
 				? `<div class="diagram-label label-hp" data-key="hp">${valueWithUnit("hp", hpTemp)}</div>`
 				: ""
 		}
 
     ${
-			lpTemp !== null
+			lpTemp !== null && compState === "on"
 				? `<div class="diagram-label label-lp" data-key="lp">${valueWithUnit("lp", lpTemp)}</div>`
 				: ""
 		}
@@ -175,7 +223,12 @@ export function buildDiagramView({ hass, config, imageBase }) {
 
     ${
 			tankVv !== null
-				? `<div class="diagram-label label-tank-vv" data-key="tankVv">${valueWithUnit("tankVv", tankVv)}</div>`
+				? (vvActive
+						? `<div class="diagram-label label-tank-vv" data-key="tankVv">${valueWithUnit(
+								"tankVv",
+								tankVv,
+						  )}</div>`
+						: "")
 				: ""
 		}
 
@@ -197,10 +250,10 @@ export function buildDiagramView({ hass, config, imageBase }) {
 				: ""
 		}
 
-    <div class="diagram-icon icon-cv-pump" data-icon-key="cvPump" style="opacity:${opacityFor(cvPumpState)};">
+    <div class="diagram-icon icon-cv-pump" data-icon-key="cvPump" style="opacity:${/* gated by circ pump sensor */ (circPumpSensorState === "on" ? opacityFor(cvPumpState) : 0)};">
       <img src="${imageBase}CV_on.gif" alt="CV pump" />
     </div>
-    <div class="diagram-icon icon-cv-flow" data-icon-key="cvPump" style="opacity:${opacityFor(cvPumpState)};">
+    <div class="diagram-icon icon-cv-flow" data-icon-key="cvPump" style="opacity:${(circPumpSensorState === "on" ? opacityFor(cvPumpState) : 0)};">
       <img src="${imageBase}CVflow_on.gif" alt="CV flow" />
     </div>
 
@@ -222,16 +275,7 @@ export function buildDiagramView({ hass, config, imageBase }) {
 				: ""
 		}
 
-    ${
-			auxHeating && auxHeating !== "Off"
-				? `<ha-icon
-             class="diagram-element icon-aux"
-             data-icon-key="aux"
-             style="color:var(--warning-color, #fdd835);"
-             icon="mdi:lightning-bolt-outline">
-           </ha-icon>`
-				: ""
-		}
+    ${auxDiagramIconHtml}
 
     <div class="mode-bar">
       ${
@@ -275,9 +319,9 @@ export function buildDiagramView({ hass, config, imageBase }) {
       ${
 				auxEntities.length
 					? `<div class="${auxChipClasses}" data-popup="aux">
-               <ha-icon icon="mdi:lightning-bolt-outline" style="color:${auxIconColor};"></ha-icon>
-               <span class="chip-label">AUX</span>
-             </div>`
+               ${auxChipIconHtml ? auxChipIconHtml : `<ha-icon icon="mdi:lightning-bolt-outline" style="color:${auxIconColor};"></ha-icon>`}
+                <span class="chip-label">AUX</span>
+              </div>`
 					: ""
 			}
     </div>

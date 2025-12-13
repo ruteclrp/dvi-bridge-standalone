@@ -1,6 +1,6 @@
 ENTITY_MAP = {
   # FC04 sensors
-  "sensor.cv_forward": {
+  "sensor.cv_forward_temp": {
     "source": ("input_registers", "CV Forward"),
     "domain": "sensor",
     "attributes": {
@@ -8,7 +8,7 @@ ENTITY_MAP = {
       "device_class": "temperature"
     }
   },
-  "sensor.cv_return": {
+  "sensor.cv_return_temp": {
     "source": ("input_registers", "CV Return"),
     "domain": "sensor",
     "attributes": {
@@ -16,7 +16,7 @@ ENTITY_MAP = {
       "device_class": "temperature"
     }
   },
-  "sensor.storage_tank_vv": {
+  "sensor.storage_tank_vv_temp": {
     "source": ("input_registers", "Storage tank VV"),
     "domain": "sensor",
     "attributes": {
@@ -24,7 +24,7 @@ ENTITY_MAP = {
       "device_class": "temperature"
     }
   },
-  "sensor.storage_tank_cv": {
+  "sensor.storage_tank_cv_temp": {
     "source": ("input_registers", "Storage tank CV"),
     "domain": "sensor",
     "attributes": {
@@ -32,7 +32,7 @@ ENTITY_MAP = {
       "device_class": "temperature"
     }
   },
-  "sensor.evaporator": {
+  "sensor.evaporator_temp": {
     "source": ("input_registers", "Evaporator"),
     "domain": "sensor",
     "attributes": {

@@ -67,10 +67,10 @@ export function buildDiagramView({ hass, config, imageBase }) {
 	const auxHeating = config.aux_heating ? getState(config.aux_heating) : null;
 
 	// heating element sensor used when aux select = "Automatic"
-	const heatingElementState = getState("binary_sensor.dvi_lv12_heating_element");
+	const heatingElementState = getState("binary_sensor.heating_element");
 
 	// circulation pump sensor used to show/hide CV pump & CV flow gifs
-	const circPumpSensorState = getState("binary_sensor.dvi_lv12_circ_pump_cv");
+	const circPumpSensorState = getState("binary_sensor.circ_pump_cv");
     
 	// Build aux icon HTML according to rules:
 	// - "Off" -> don't show

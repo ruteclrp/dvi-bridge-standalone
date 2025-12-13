@@ -14,14 +14,38 @@
 
       const card = document.createElement("lv-heatpump-card");
       card.setConfig({
-        cv_mode: "select.cv_mode",
-        vv_mode: "select.vv_mode",
         outdoor_temp: "sensor.outdoor_temp",
         curve_temp: "sensor.curve_temp",
-        cv_curve_number: "number.cv_curve",
-        cv_min_number: "number.cv_min",
-        cv_max_number: "number.cv_max",
+        cv_forward_temp: "sensor.cv_forward_temp",
+        cv_return_temp: "sensor.cv_return_temp",
+        storage_tank_cv: "sensor.storage_tank_cv_temp",
+        storage_tank_vv: "sensor.storage_tank_vv_temp",
+        evaporator_temp: "sensor.evaporator_temp",
+        hp_temp: "sensor.compressor_hp",
+        lp_temp: "sensor.compressor_lp",
+
+        cv_mode: "select.cv_mode",
+        vv_mode: "select.vv_mode",
+        cv_night: "select.cv_night",
+        vv_schedule: "select.vv_schedule",
+        aux_heating: "select.aux_heating",
+
+        comp_icon: "binary_sensor.soft_starter_compressor",
+        cv_pump_icon: "binary_sensor.circ_pump_cv",
+        defrost_icon: "binary_sensor.four_way_valve_defrost",
+
+        cv_entities: [
+          "sensor.cv_forward_temp",
+          "sensor.cv_return_temp",
+        ],
+        vv_entities: [
+          "sensor.storage_tank_vv_temp",
+        ],
+        aux_entities: [
+          "binary_sensor.heating_element",
+        ],
       });
+
 
       card.hass = hass;
       document.body.appendChild(card);

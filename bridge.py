@@ -11,6 +11,7 @@ import warnings
 import glob
 import subprocess
 import socket  # <-- nødvendig til _get_default_gateway_linux
+import tempfile
 from typing import Optional
 
 # Find STM32 Virtual COM Port automatically
@@ -51,6 +52,31 @@ def _refresh_static_values() -> None:
         load_dotenv(override=True)
     except Exception as e:
         print(f"⚠️ Failed to run read_static_values_modbustk.py: {e}")
+
+STATE_PATH = "/var/run/dvi/state.json"
+
+def write_state_atomic(state: dict) -> None:
+    """
+    Atomically write JSON state to STATE_PATH.
+    Readers will always see either the old or the new file, never a partial write.
+    """
+    dir_name = os.path.dirname(STATE_PATH)
+
+    # Ensure directory exists
+    os.makedirs(dir_name, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        dir=dir_name,
+        delete=False
+    ) as tmp:
+        json.dump(state, tmp)
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        temp_name = tmp.name
+
+    # Atomic replace on POSIX
+    os.replace(temp_name, STATE_PATH)
 
 def _ensure_pump_id() -> Optional[str]:
     _refresh_static_values()
@@ -506,7 +532,7 @@ def publish_all_discovery() -> None:
                 mapping = {
                     "cv_mode": {0: "Off", 1: "On"},
                     "cv_night": {0: "Timer", 1: "Constant day", 2: "Constant night"},
-                    "vv_mode": {0: "Off", 1: "On"},
+                    "vv_mode": {0: "Off", 1: "On", 2: "Timer"},
                     "vv_schedule": {0: "Timer", 1: "Constant on", 2: "Constant off"},
                     "aux_heating": {0: "Off", 1: "Automatic", 2: "On"},
                     "central_heating_config": {
@@ -962,6 +988,7 @@ while True:
     # Only publish if payload changed
     if full_payload != last_published:
         mqtt_client.publish("dvi/measurement", json.dumps(full_payload))
+        write_state_atomic(full_payload)
         last_published = full_payload
 
     time.sleep(1)

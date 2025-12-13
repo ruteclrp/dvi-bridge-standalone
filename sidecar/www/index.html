@@ -1,1 +1,40 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>DVI Heatpump</title>
+
+  <script type="module">
+    import "./dvi-card/dvi-lv-heatpump-card.js";
+    import { HassAdapter } from "./hass-adapter.js";
+
+    window.addEventListener("DOMContentLoaded", async () => {
+      const hass = new HassAdapter();
+      await hass.refresh();
+
+      const card = document.createElement("lv-heatpump-card");
+      card.setConfig({
+        cv_mode: "select.cv_mode",
+        vv_mode: "select.vv_mode",
+        outdoor_temp: "sensor.outdoor_temp",
+        curve_temp: "sensor.curve_temp",
+        cv_curve_number: "number.cv_curve",
+        cv_min_number: "number.cv_min",
+        cv_max_number: "number.cv_max",
+      });
+
+      card.hass = hass;
+      document.body.appendChild(card);
+
+      setInterval(async () => {
+        await hass.refresh();
+        card.hass = hass;
+      }, 2000);
+    });
+  </script>
+</head>
+
+<body style="margin:0; background:#111;">
+</body>
+</html>
 

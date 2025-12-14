@@ -53,7 +53,7 @@ def _refresh_static_values() -> None:
     except Exception as e:
         print(f"⚠️ Failed to run read_static_values_modbustk.py: {e}")
 
-STATE_PATH = "/var/run/dvi/state.json"
+STATE_PATH = "./state.json"
 
 def write_state_atomic(state: dict) -> None:
     """

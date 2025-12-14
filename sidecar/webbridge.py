@@ -27,7 +27,7 @@ for entity_id, cfg in ENTITY_MAP.items():
         "attributes": cfg.get("attributes", {})
     }
 
-STATE_PATH = "/var/run/dvi/state.json"
+STATE_PATH = "./../state.json"
 STATE_POLL_INTERVAL = 1.0  # seconds
 
 import time

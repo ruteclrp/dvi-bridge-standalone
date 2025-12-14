@@ -64,6 +64,14 @@ ENTITY_MAP = {
       "device_class": "temperature"
     }
   },
+    "sensor.em23_power": {
+    "source": ("input_registers", "em23 power"),
+    "domain": "sensor",
+    "attributes": {
+      "unit_of_measurement": "kW",
+      "device_class": "power"
+    }
+  },
   # FC01 coils
   "binary_sensor.soft_starter_compressor": {
     "source": ("coils", "Soft starter Compressor"),

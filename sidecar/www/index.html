@@ -18,11 +18,12 @@
         curve_temp: "sensor.curve_temp",
         cv_forward_temp: "sensor.cv_forward_temp",
         cv_return_temp: "sensor.cv_return_temp",
-        storage_tank_cv: "sensor.storage_tank_cv_temp",
-        storage_tank_vv: "sensor.storage_tank_vv_temp",
+        storage_tank_cv: "sensor.storage_tank_cv",
+        storage_tank_vv: "sensor.storage_tank_vv",
         evaporator_temp: "sensor.evaporator_temp",
         hp_temp: "sensor.compressor_hp",
         lp_temp: "sensor.compressor_lp",
+        em23_power: "sensor.em23_power",
 
         cv_mode: "select.cv_mode",
         vv_mode: "select.vv_mode",
@@ -39,7 +40,7 @@
           "sensor.cv_return_temp",
         ],
         vv_entities: [
-          "sensor.storage_tank_vv_temp",
+          "sensor.storage_tank_vv",
         ],
         aux_entities: [
           "binary_sensor.heating_element",
@@ -57,6 +58,35 @@
     });
   </script>
 </head>
+
+<script type="module">
+  class HaIcon extends HTMLElement {
+    connectedCallback() {
+      const icon = this.getAttribute("icon") || "";
+      this.innerHTML = `<span class="mdi ${icon}"></span>`;
+    }
+  }
+  customElements.define("ha-icon", HaIcon);
+</script>
+
+<style>
+  body {
+    font-family: "Roboto", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: #eee;
+    background: #111;
+    margin: 0;
+  }
+
+  .diagram-label {
+    font-family: "Roboto", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+  }
+
+  .chip-label, .chip-value {
+    font-family: "Roboto", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  }
+</style>
+
 
 <body style="margin:0; background:#111;">
 </body>

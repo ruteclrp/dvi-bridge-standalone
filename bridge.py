@@ -408,6 +408,69 @@ def on_message(client, userdata, msg):
     except Exception as e:
         print(f"❌ Command handling failed for {msg.topic}: {e}")
 
+# --- File-based command processing (standalone mode) ---
+# TESTING: Only aux_heating select for now
+
+COMMANDS_FILE = os.path.join(SCRIPT_DIR, "commands.json")
+
+def process_file_commands():
+    """Read commands.json, execute aux_heating commands, remove processed (TESTING ONLY)"""
+    if not os.path.exists(COMMANDS_FILE):
+        return
+    
+    try:
+        with open(COMMANDS_FILE, "r") as f:
+            commands = json.load(f)
+        
+        if not isinstance(commands, list):
+            return
+        
+        remaining_commands = []
+        
+        for cmd in commands:
+            entity_id = cmd.get("entity_id")
+            domain = cmd.get("domain")
+            service = cmd.get("service")
+            value = cmd.get("value")
+            
+            # TESTING: Only process aux_heating select
+            if entity_id != "select.aux_heating":
+                print(f"⏭️ Skipping non-aux_heating command: {entity_id}")
+                continue  # Remove from queue
+            
+            if domain != "select" or service != "select_option":
+                print(f"⏭️ Skipping unsupported service: {domain}.{service}")
+                continue  # Remove from queue
+            
+            if value is None:
+                print(f"⏭️ Skipping command with no value")
+                continue  # Remove from queue
+            
+            # aux_heating: register 0x0F for read, 0x10F for write
+            # Registers below 0x100 are dummy reads, add 0x100 for actual writes
+            # value is already numeric (0/1/2): {0: "Off", 1: "Automatic", 2: "On"}
+            print(f"📝 File command: aux_heating = {value} ({['Off', 'Automatic', 'On'][value] if 0 <= value <= 2 else 'unknown'})")
+            
+            try:
+                write_fc06(0x10F, value)  # Write register = 0x0F + 0x100
+                print(f"✅ Command executed: aux_heating reg=0x10F value={value}")
+                # Successfully executed - don't keep in queue
+            except Exception as e:
+                print(f"❌ Failed to write aux_heating: {e}")
+                # Keep failed command in queue for retry
+                remaining_commands.append(cmd)
+        
+        # Atomically update commands.json with only remaining (failed) commands
+        commands_dir = os.path.dirname(os.path.abspath(COMMANDS_FILE))
+        with tempfile.NamedTemporaryFile(mode="w", dir=commands_dir, delete=False) as tmp:
+            json.dump(remaining_commands, tmp, indent=2)
+            tmp_path = tmp.name
+        
+        os.replace(tmp_path, COMMANDS_FILE)
+            
+    except Exception as e:
+        print(f"❌ Error processing file commands: {e}")
+
 # --- FC06 registers discovery ---
 
 fc06_registers = {
@@ -843,6 +906,22 @@ last_inputs = {}
 last_writes = {}
 last_published = None
 
+# Curve configuration maps (for command processing)
+CURVE_MAPS = {
+    0: {
+        "write": {12: 0x12F, -12: 0x130},
+        "read": {12: 0x2F, -12: 0x30},
+    },
+    1: {
+        "write": {12: 0x131, -12: 0x132},
+        "read": {12: 0x31, -12: 0x32},
+    },
+    2: {
+        "write": {12: 0x133, -12: 0x134},
+        "read": {12: 0x33, -12: 0x34},
+    },
+}
+
 # Start MQTT and push net config once at startup
 mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
 mqtt_client.loop_start()
@@ -852,6 +931,9 @@ _push_network_config_to_modbus()
 
 while True:
     now = time.time()
+
+    # Process file-based commands (standalone mode)
+    process_file_commands()
 
     # Coils every 13s
     if now - last_coil_update >= 13:

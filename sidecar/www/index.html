@@ -173,6 +173,7 @@
         hp_temp: "sensor.compressor_hp",
         lp_temp: "sensor.compressor_lp",
         em23_power: "sensor.em23_power",
+        em23_energy: "sensor.em23_energy",
 
         cv_mode: "select.cv_mode",
         vv_mode: "select.vv_mode",
@@ -192,12 +193,11 @@
         cv_max_number: "number.cv_max",
 
         info_entities: [
-          "sensor.outdoor_temp",
-          "sensor.curve_temp",
+          "sensor.em23_energy_total", 
           "sensor.em23_power",
-          "sensor.evaporator_temp",
-          "sensor.compressor_hp",
-          "sensor.compressor_lp",
+          "sensor.comp_hours",
+          "sensor.vv_hours",
+          "sensor.heating_hours",
         ],
         cv_entities: [
           "sensor.cv_forward_temp",
@@ -223,11 +223,68 @@
       // Wire up popup functionality
       setupPopupHandler(hass);
 
+      // Apply Chart.js dark mode wrapper when Chart.js loads
+      const chartInterval = setInterval(() => {
+        if (window.Chart && !window.Chart._darkModePatched) {
+          applyChartDarkMode();
+          clearInterval(chartInterval);
+        }
+      }, 100);
+
       setInterval(async () => {
         await hass.refresh();
         card.hass = hass;
       }, 2000);
     });
+
+    // Apply Chart.js dark mode wrapper
+    function applyChartDarkMode() {
+      if (!window.Chart || window.Chart._darkModePatched) return;
+      
+      const OriginalChart = window.Chart;
+      window.Chart = function(ctx, config) {
+        // Comprehensive dark mode color injection
+        if (config?.options?.scales) {
+          // X axis
+          if (config.options.scales.x) {
+            config.options.scales.x.grid = config.options.scales.x.grid || {};
+            config.options.scales.x.grid.color = 'rgba(255,255,255,0.3)';
+            config.options.scales.x.grid.borderColor = 'rgba(255,255,255,0.5)';
+            config.options.scales.x.ticks = config.options.scales.x.ticks || {};
+            config.options.scales.x.ticks.color = '#fff';
+            if (config.options.scales.x.title) {
+              config.options.scales.x.title.color = '#fff';
+            }
+          }
+          // Y axis
+          if (config.options.scales.y) {
+            config.options.scales.y.grid = config.options.scales.y.grid || {};
+            config.options.scales.y.grid.color = 'rgba(255,255,255,0.3)';
+            config.options.scales.y.grid.borderColor = 'rgba(255,255,255,0.5)';
+            config.options.scales.y.ticks = config.options.scales.y.ticks || {};
+            config.options.scales.y.ticks.color = '#fff';
+            if (config.options.scales.y.title) {
+              config.options.scales.y.title.color = '#fff';
+            }
+          }
+        }
+        // Legend
+        if (config?.options?.plugins?.legend?.labels) {
+          config.options.plugins.legend.labels.color = '#fff';
+        }
+        // Tooltip
+        if (config?.options?.plugins?.tooltip) {
+          config.options.plugins.tooltip.titleColor = '#fff';
+          config.options.plugins.tooltip.bodyColor = '#fff';
+        }
+        return new OriginalChart(ctx, config);
+      };
+      // Copy static properties
+      Object.setPrototypeOf(window.Chart, OriginalChart);
+      Object.assign(window.Chart, OriginalChart);
+      window.Chart._darkModePatched = true;
+      console.log('✅ Chart.js dark mode applied');
+    }
 
     // Popup handler setup - intercepts browser_mod.popup calls
     function setupPopupHandler(hass) {
@@ -250,61 +307,29 @@
         if (content && content.type === "custom:heat-curve-card") {
           modalTitle.textContent = title || "Heat Curve";
           
-          // Wrap Chart constructor to inject dark mode options
-          if (window.Chart && !window.Chart._darkModePatched) {
-            const OriginalChart = window.Chart;
-            window.Chart = function(ctx, config) {
-              // Inject dark mode colors into the config
-              if (config?.options?.scales) {
-                if (config.options.scales.x) {
-                  config.options.scales.x.grid = config.options.scales.x.grid || {};
-                  config.options.scales.x.grid.color = 'rgba(255,255,255,0.2)';
-                  config.options.scales.x.ticks = config.options.scales.x.ticks || {};
-                  config.options.scales.x.ticks.color = '#ddd';
-                  if (config.options.scales.x.title) {
-                    config.options.scales.x.title.color = '#ddd';
-                  }
-                }
-                if (config.options.scales.y) {
-                  config.options.scales.y.grid = config.options.scales.y.grid || {};
-                  config.options.scales.y.grid.color = 'rgba(255,255,255,0.2)';
-                  config.options.scales.y.ticks = config.options.scales.y.ticks || {};
-                  config.options.scales.y.ticks.color = '#ddd';
-                  if (config.options.scales.y.title) {
-                    config.options.scales.y.title.color = '#ddd';
-                  }
-                }
-              }
-              if (config?.options?.plugins?.legend?.labels) {
-                config.options.plugins.legend.labels.color = '#ddd';
-              }
-              return new OriginalChart(ctx, config);
-            };
-            // Copy static properties
-            Object.setPrototypeOf(window.Chart, OriginalChart);
-            Object.assign(window.Chart, OriginalChart);
-            window.Chart._darkModePatched = true;
-          }
-          
-          // Create the heat-curve-card element
-          const heatCurveCard = document.createElement("heat-curve-card");
-          
-          // Debug: log entity values
-          console.log('Heat Curve Entities:', content.entities);
-          Object.entries(content.entities || {}).forEach(([key, entityId]) => {
-            const state = hass.states?.[entityId];
-            console.log(`${key} (${entityId}):`, state?.state, state?.attributes);
-          });
-          
-          heatCurveCard.setConfig({
-            title: content.title || title,
-            entities: content.entities
-          });
-          heatCurveCard.hass = hass;
-          
-          // Clear modal body and append the card
-          modalBody.innerHTML = "";
-          modalBody.appendChild(heatCurveCard);
+          // Load Chart.js and apply dark mode BEFORE creating the card
+          (async () => {
+            // Ensure Chart.js is loaded
+            if (!window.Chart) {
+              await import("https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js");
+            }
+            
+            // Apply dark mode wrapper
+            applyChartDarkMode();
+            
+            // Now create the heat-curve-card
+            const heatCurveCard = document.createElement("heat-curve-card");
+            
+            heatCurveCard.setConfig({
+              title: content.title || title,
+              entities: content.entities
+            });
+            heatCurveCard.hass = hass;
+            
+            // Clear modal body and append the card
+            modalBody.innerHTML = "";
+            modalBody.appendChild(heatCurveCard);
+          })();
           
           modal.classList.add("active");
           return;

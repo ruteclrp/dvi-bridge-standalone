@@ -64,12 +64,21 @@ ENTITY_MAP = {
       "device_class": "temperature"
     }
   },
-    "sensor.em23_power": {
+  "sensor.em23_power": {
     "source": ("input_registers", "em23_power"), 
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "kW",
       "device_class": "power"
+    }
+  },
+  "sensor.em23_energy": {
+    "source": ("input_registers", "em23_energy"),
+    "domain": "sensor",
+    "attributes": {
+      "unit_of_measurement": "kWh",
+      "device_class": "energy",
+      "state_class": "total_increasing"
     }
   },
   # FC01 coils

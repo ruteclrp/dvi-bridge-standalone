@@ -65,7 +65,7 @@ ENTITY_MAP = {
     }
   },
     "sensor.em23_power": {
-    "source": ("input_registers", "em23 power"),
+    "source": ("input_registers", "em23_power"), 
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "kW",
@@ -221,6 +221,28 @@ ENTITY_MAP = {
       "min": 1,
       "max": 20,
       "step": 1
+    }
+  },
+  "number.curve_set_minus12": {
+    "source": ("write_registers", "curve_set_-12_read"),
+    "domain": "number",
+    "command_topic": "dvi/command/curvesetminus12",
+    "attributes": {
+      "min": 20,
+      "max": 60,
+      "step": 1,
+      "unit_of_measurement": "°C"
+    }
+  },
+  "number.curve_set_plus12": {
+    "source": ("write_registers", "curve_set_12_read"),
+    "domain": "number",
+    "command_topic": "dvi/command/curvesetplus12",
+    "attributes": {
+      "min": 20,
+      "max": 60,
+      "step": 1,
+      "unit_of_measurement": "°C"
     }
   },
   "number.vv_setpoint": {

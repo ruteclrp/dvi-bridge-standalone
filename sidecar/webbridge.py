@@ -9,6 +9,8 @@ from entity_map import ENTITY_MAP
 # -----------------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+WWW_DIR = os.path.join(BASE_DIR, "www")
 
 HTTP_HOST = "0.0.0.0"
 HTTP_PORT = 5000
@@ -79,7 +81,7 @@ print(f"✅ Reading state from {STATE_PATH}")
 # Flask app
 # -----------------------------------------------------------------------------
 
-app = Flask(__name__, static_folder="www", static_url_path="")
+app = Flask(__name__, static_folder=WWW_DIR, static_url_path="")
 
 @app.route("/")
 def index():

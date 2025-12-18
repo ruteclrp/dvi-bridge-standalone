@@ -53,10 +53,19 @@ export function buildDiagramView({ hass, config, imageBase }) {
 	const valueWithUnit = (key, value) =>
 		value === null ? "" : `${value}<span class="diagram-unit">${unitForKey(key)}</span>`;
 
-	const normalizeState = (state) => (typeof state === "string" ? state.toLowerCase() : state);
-	const isModeActive = (state) => {
+	const normalizeState = (state) => String(state).toLowerCase();
+	const isModeActive = (state, schedule = null) => {
 		const normalized = normalizeState(state);
-		return normalized !== null && normalized !== undefined && normalized !== "off" && normalized !== "unavailable";
+		if (normalized === "off" || normalized === "0") return false;
+		if (normalized === "on" || normalized === "1") return true;
+		if (normalized === "timer" || normalized === "2") {
+			if (schedule) {
+				const schedNorm = normalizeState(schedule);
+				return schedNorm !== "constant off" && schedNorm !== "0";
+			}
+			return true;
+		}
+		return false;
 	};
 	const chipStateClass = (active) => (active ? "mode-chip--active" : "mode-chip--inactive");
 
@@ -131,7 +140,7 @@ export function buildDiagramView({ hass, config, imageBase }) {
 	const defrostState = config.defrost_icon ? getState(config.defrost_icon) : null;
 
 	const cvActive = isModeActive(cvMode);
-	const vvActive = isModeActive(vvMode);
+	const vvActive = isModeActive(vvMode, vvSchedule);
 	const auxActive = isModeActive(auxHeating);
 
 	const cvIconColor = cvActive

@@ -2,10 +2,159 @@
 <html>
 <head>
   <meta charset="utf-8">
+  <link rel="stylesheet" href="/css/materialdesignicons.min.css">
   <title>DVI Heatpump</title>
+
+  <!-- Define ha-icon FIRST -->
+  <script type="module">
+    class HaIcon extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "/css/materialdesignicons.min.css";
+        const style = document.createElement("style");
+        style.textContent = `
+          :host { 
+            display: inline-block; 
+            width: 24px; 
+            height: 24px;
+          }
+          i { 
+            font-size: 24px; 
+            line-height: 1;
+            color: inherit;
+          }
+        `;
+        this.shadowRoot.append(link, style);
+      }
+
+      connectedCallback() {
+        let icon = (this.getAttribute("icon") || "").replace("mdi:", "mdi-");
+        const i = document.createElement("i");
+        i.className = `mdi ${icon}`;
+        this.shadowRoot.appendChild(i);
+      }
+    }
+    customElements.define("ha-icon", HaIcon);
+
+    // Define ha-card for heat-curve-card
+    class HaCard extends HTMLElement {
+      connectedCallback() {
+        const header = this.getAttribute("header");
+        if (!this.querySelector(".ha-card-header") && header) {
+          const headerEl = document.createElement("div");
+          headerEl.className = "ha-card-header";
+          headerEl.textContent = header;
+          this.prepend(headerEl);
+        }
+      }
+      
+      static get observedAttributes() {
+        return ["header"];
+      }
+      
+      attributeChangedCallback(name, oldValue, newValue) {
+        if (name === "header" && this.isConnected) {
+          let headerEl = this.querySelector(".ha-card-header");
+          if (!headerEl) {
+            headerEl = document.createElement("div");
+            headerEl.className = "ha-card-header";
+            this.prepend(headerEl);
+          }
+          headerEl.textContent = newValue;
+        }
+      }
+    }
+    customElements.define("ha-card", HaCard);
+
+    // Define hui-entities-card for heat-curve-card controls
+    class HuiEntitiesCard extends HTMLElement {
+      constructor() {
+        super();
+        this._config = null;
+        this._hass = null;
+      }
+
+      setConfig(config) {
+        this._config = config;
+        this._render();
+      }
+
+      set hass(hass) {
+        this._hass = hass;
+        this._render();
+      }
+
+      _render() {
+        if (!this._config || !this._hass) return;
+
+        const entities = this._config.entities || [];
+        
+        this.innerHTML = entities.map(entityId => {
+          const state = this._hass.states?.[entityId];
+          if (!state) return "";
+
+          const name = state.attributes?.friendly_name || entityId;
+          const stateValue = state.state;
+          const domain = entityId.split(".")[0];
+
+          // For number entities, show as input
+          if (domain === "number") {
+            const min = state.attributes?.min || 0;
+            const max = state.attributes?.max || 100;
+            const step = state.attributes?.step || 0.1;
+            const unit = state.attributes?.unit_of_measurement || "";
+            return `
+              <div class="entity-row">
+                <div class="entity-name">${name}</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input type="number" class="entity-control heat-curve-control" 
+                    data-entity="${entityId}" 
+                    value="${stateValue}" 
+                    min="${min}" 
+                    max="${max}" 
+                    step="${step}" 
+                    style="width: 100px;" />
+                  ${unit ? `<span style="color: #999;">${unit}</span>` : ""}
+                </div>
+              </div>
+            `;
+          }
+
+          // Default: show state as text
+          return `
+            <div class="entity-row">
+              <div class="entity-name">${name}</div>
+              <div class="entity-state">${stateValue}</div>
+            </div>
+          `;
+        }).join("");
+
+        // Add change handlers
+        this.querySelectorAll(".heat-curve-control").forEach(control => {
+          control.addEventListener("change", async (e) => {
+            const entityId = e.target.dataset.entity;
+            const value = parseFloat(e.target.value);
+            
+            await this._hass.callService("number", "set_value", {
+              entity_id: entityId,
+              value: value
+            });
+            
+            // Refresh after change
+            setTimeout(() => this._hass.refresh?.(), 500);
+          });
+        });
+      }
+    }
+    customElements.define("hui-entities-card", HuiEntitiesCard);
+  </script>
 
   <script type="module">
     import "./dvi-card/dvi-lv-heatpump-card.js";
+    import "./dvi-card/dvi-lv/heat_curve_card.js";
     import { HassAdapter } from "./hass-adapter.js";
 
     window.addEventListener("DOMContentLoaded", async () => {
@@ -18,8 +167,8 @@
         curve_temp: "sensor.curve_temp",
         cv_forward_temp: "sensor.cv_forward_temp",
         cv_return_temp: "sensor.cv_return_temp",
-        storage_tank_cv: "sensor.storage_tank_cv",
-        storage_tank_vv: "sensor.storage_tank_vv",
+        storage_tank_cv: "sensor.storage_tank_cv_temp",
+        storage_tank_vv: "sensor.storage_tank_vv_temp",
         evaporator_temp: "sensor.evaporator_temp",
         hp_temp: "sensor.compressor_hp",
         lp_temp: "sensor.compressor_lp",
@@ -35,15 +184,35 @@
         cv_pump_icon: "binary_sensor.circ_pump_cv",
         defrost_icon: "binary_sensor.four_way_valve_defrost",
 
+        // Heat curve entities (for the heat curve card popup)
+        cv_curve_number: "number.cv_curve",
+        curve_set_minus12_number: "number.curve_set_minus12",
+        curve_set_plus12_number: "number.curve_set_plus12",
+        cv_min_number: "number.cv_min",
+        cv_max_number: "number.cv_max",
+
+        info_entities: [
+          "sensor.outdoor_temp",
+          "sensor.curve_temp",
+          "sensor.em23_power",
+          "sensor.evaporator_temp",
+          "sensor.compressor_hp",
+          "sensor.compressor_lp",
+        ],
         cv_entities: [
           "sensor.cv_forward_temp",
           "sensor.cv_return_temp",
+          "select.cv_mode",
+          "select.cv_night",
         ],
         vv_entities: [
-          "sensor.storage_tank_vv",
+          "sensor.storage_tank_vv_temp",
+          "select.vv_mode",
+          "select.vv_schedule",
         ],
         aux_entities: [
           "binary_sensor.heating_element",
+          "select.aux_heating",
         ],
       });
 
@@ -51,23 +220,207 @@
       card.hass = hass;
       document.body.appendChild(card);
 
+      // Wire up popup functionality
+      setupPopupHandler(hass);
+
       setInterval(async () => {
         await hass.refresh();
         card.hass = hass;
       }, 2000);
     });
+
+    // Popup handler setup - intercepts browser_mod.popup calls
+    function setupPopupHandler(hass) {
+      const modal = document.getElementById("modal-overlay");
+      const modalTitle = document.getElementById("modal-title");
+      const modalBody = document.getElementById("modal-body");
+      const modalClose = document.getElementById("modal-close");
+
+      // Close modal handlers
+      modalClose.onclick = () => modal.classList.remove("active");
+      modal.onclick = (e) => {
+        if (e.target === modal) modal.classList.remove("active");
+      };
+
+      // Set popup callback to intercept browser_mod.popup service calls
+      hass.popupCallback = (data) => {
+        const { title, content } = data;
+        
+        // Handle heat-curve card popup (custom card)
+        if (content && content.type === "custom:heat-curve-card") {
+          modalTitle.textContent = title || "Heat Curve";
+          
+          // Wrap Chart constructor to inject dark mode options
+          if (window.Chart && !window.Chart._darkModePatched) {
+            const OriginalChart = window.Chart;
+            window.Chart = function(ctx, config) {
+              // Inject dark mode colors into the config
+              if (config?.options?.scales) {
+                if (config.options.scales.x) {
+                  config.options.scales.x.grid = config.options.scales.x.grid || {};
+                  config.options.scales.x.grid.color = 'rgba(255,255,255,0.2)';
+                  config.options.scales.x.ticks = config.options.scales.x.ticks || {};
+                  config.options.scales.x.ticks.color = '#ddd';
+                  if (config.options.scales.x.title) {
+                    config.options.scales.x.title.color = '#ddd';
+                  }
+                }
+                if (config.options.scales.y) {
+                  config.options.scales.y.grid = config.options.scales.y.grid || {};
+                  config.options.scales.y.grid.color = 'rgba(255,255,255,0.2)';
+                  config.options.scales.y.ticks = config.options.scales.y.ticks || {};
+                  config.options.scales.y.ticks.color = '#ddd';
+                  if (config.options.scales.y.title) {
+                    config.options.scales.y.title.color = '#ddd';
+                  }
+                }
+              }
+              if (config?.options?.plugins?.legend?.labels) {
+                config.options.plugins.legend.labels.color = '#ddd';
+              }
+              return new OriginalChart(ctx, config);
+            };
+            // Copy static properties
+            Object.setPrototypeOf(window.Chart, OriginalChart);
+            Object.assign(window.Chart, OriginalChart);
+            window.Chart._darkModePatched = true;
+          }
+          
+          // Create the heat-curve-card element
+          const heatCurveCard = document.createElement("heat-curve-card");
+          
+          // Debug: log entity values
+          console.log('Heat Curve Entities:', content.entities);
+          Object.entries(content.entities || {}).forEach(([key, entityId]) => {
+            const state = hass.states?.[entityId];
+            console.log(`${key} (${entityId}):`, state?.state, state?.attributes);
+          });
+          
+          heatCurveCard.setConfig({
+            title: content.title || title,
+            entities: content.entities
+          });
+          heatCurveCard.hass = hass;
+          
+          // Clear modal body and append the card
+          modalBody.innerHTML = "";
+          modalBody.appendChild(heatCurveCard);
+          
+          modal.classList.add("active");
+          return;
+        }
+
+        // Handle regular entity list popup
+        if (!content || !content.entities) return;
+
+        // Set title
+        modalTitle.textContent = title || "Details";
+
+        // Build entity rows - support both array and object formats
+        const entities = Array.isArray(content.entities) ? content.entities : Object.values(content.entities);
+        
+        modalBody.innerHTML = entities.map(entityId => {
+          const state = hass.states[entityId];
+          if (!state) return "";
+
+          const name = state.attributes?.friendly_name || entityId;
+          const stateValue = state.state;
+          const unit = state.attributes?.unit_of_measurement || "";
+          const domain = entityId.split(".")[0];
+
+          // For select entities, show as dropdown
+          if (domain === "select" && state.attributes?.options) {
+            const options = state.attributes.options.map(opt => 
+              `<option value="${opt}" ${opt === stateValue ? "selected" : ""}>${opt}</option>`
+            ).join("");
+            return `
+              <div class="entity-row">
+                <div class="entity-name">${name}</div>
+                <select class="entity-control" data-entity="${entityId}" data-domain="${domain}">
+                  ${options}
+                </select>
+              </div>
+            `;
+          }
+
+          // For number entities, show as input
+          if (domain === "number") {
+            const min = state.attributes?.min || 0;
+            const max = state.attributes?.max || 100;
+            const step = state.attributes?.step || 1;
+            return `
+              <div class="entity-row">
+                <div class="entity-name">${name}</div>
+                <input type="number" class="entity-control" data-entity="${entityId}" data-domain="${domain}" 
+                  value="${stateValue}" min="${min}" max="${max}" step="${step}" />
+              </div>
+            `;
+          }
+
+          // Default: show state as text
+          return `
+            <div class="entity-row">
+              <div class="entity-name">${name}</div>
+              <div class="entity-state">${stateValue}${unit ? " " + unit : ""}</div>
+            </div>
+          `;
+        }).join("");
+
+        // Add change handlers for controls
+        setTimeout(() => {
+          modalBody.querySelectorAll(".entity-control").forEach(control => {
+            control.addEventListener("change", async (e) => {
+              const entityId = e.target.dataset.entity;
+              const domain = e.target.dataset.domain;
+              const value = e.target.value;
+              
+              if (domain === "select") {
+                await hass.callService("select", "select_option", {
+                  entity_id: entityId,
+                  option: value
+                });
+              } else if (domain === "number") {
+                await hass.callService("number", "set_value", {
+                  entity_id: entityId,
+                  value: parseFloat(value)
+                });
+              }
+              
+              // Refresh states after change
+              setTimeout(() => hass.refresh(), 500);
+            });
+          });
+        }, 0);
+
+        // Show modal
+        modal.classList.add("active");
+      };
+    }
+  </script>
+
+  <script>
+    (function () {
+      const orig = Element.prototype.attachShadow;
+      Element.prototype.attachShadow = function (init) {
+        const root = orig.call(this, init);
+        const style = document.createElement("style");
+        style.textContent = `
+          :host { 
+            --disabled-text-color: #999;
+            --state-climate-heat-color: #ff9800;
+            --state-water-heater-heat-color: #03a9f4;
+            --warning-color: #fdd835;
+            --accent-color: #03a9f4;
+          }
+          ha-icon { color: inherit; }
+          .diagram-icon, .diagram-element { color: inherit; }
+        `;
+        root.appendChild(style);
+        return root;
+      };
+    })();
   </script>
 </head>
-
-<script type="module">
-  class HaIcon extends HTMLElement {
-    connectedCallback() {
-      const icon = this.getAttribute("icon") || "";
-      this.innerHTML = `<span class="mdi ${icon}"></span>`;
-    }
-  }
-  customElements.define("ha-icon", HaIcon);
-</script>
 
 <style>
   body {
@@ -85,10 +438,185 @@
   .chip-label, .chip-value {
     font-family: "Roboto", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
+
+  /* Modal Popup Styles */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.active {
+    display: flex;
+  }
+
+  .modal-content {
+    background: #1e1e1e;
+    border-radius: 8px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .modal-title {
+    font-size: 1.2em;
+    font-weight: 600;
+    color: #eee;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: #999;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  .modal-close:hover {
+    background: #333;
+    color: #eee;
+  }
+
+  .modal-body {
+    padding: 16px 20px;
+  }
+
+  .entity-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #2a2a2a;
+  }
+
+  .entity-row:last-child {
+    border-bottom: none;
+  }
+
+  .entity-name {
+    color: #ccc;
+    font-size: 0.95em;
+  }
+
+  .entity-state {
+    color: #03a9f4;
+    font-weight: 600;
+    font-size: 0.95em;
+  }
+
+  .entity-control {
+    background: #2a2a2a;
+    border: 1px solid #444;
+    color: #eee;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    min-width: 120px;
+  }
+
+  .entity-control:focus {
+    outline: none;
+    border-color: #03a9f4;
+  }
+
+  select.entity-control {
+    cursor: pointer;
+  }
+
+  input.entity-control {
+    text-align: right;
+  }
+
+  /* ha-card styling */
+  ha-card {
+    display: block;
+    background: #1e1e1e;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .ha-card-header {
+    padding: 16px 20px;
+    font-size: 1.1em;
+    font-weight: 600;
+    color: #f5f5f5;
+    border-bottom: 1px solid #444;
+  }
+
+  /* Heat Curve Card styling */
+  .heat-curve-card__chart {
+    padding: 20px;
+    height: 400px;
+    background: #1e1e1e;
+  }
+
+  .heat-curve-card__chart canvas {
+    background: #2a2a2a !important;
+    border-radius: 4px;
+  }
+
+  /* Force Chart.js elements to be visible */
+  .heat-curve-card__chart canvas * {
+    color: #ddd !important;
+  }
+
+  .heat-curve-card__controls {
+    padding: 16px 20px;
+    border-top: 1px solid #444;
+    background: #252525;
+  }
+
+  .heat-curve-card__controls .entity-row {
+    padding: 10px 0;
+    border-bottom: 1px solid #333;
+  }
+
+  .heat-curve-card__controls .entity-row:last-child {
+    border-bottom: none;
+  }
+
+  .heat-curve-card__controls .entity-name {
+    color: #ddd;
+    font-weight: 500;
+  }
 </style>
 
 
 <body style="margin:0; background:#111;">
+  <!-- Modal Popup -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-title"></div>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
 </body>
 </html>
 

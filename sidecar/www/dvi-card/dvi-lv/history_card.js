@@ -67,7 +67,19 @@ class HistoryCard extends HTMLElement {
     this._timeSpan = hours;
     // Update active button styling
     this.querySelectorAll('.time-span-btn').forEach(btn => {
-      btn.classList.toggle('active', parseInt(btn.dataset.hours) === hours);
+      const isActive = parseInt(btn.dataset.hours) === hours;
+      btn.classList.toggle('active', isActive);
+      
+      // Update inline styles
+      if (isActive) {
+        btn.style.background = '#2b7bd3';
+        btn.style.borderColor = '#2b7bd3';
+        btn.style.color = 'white';
+      } else {
+        btn.style.background = 'white';
+        btn.style.borderColor = '#ddd';
+        btn.style.color = '#333';
+      }
     });
     this.updateChart();
   }
@@ -83,7 +95,7 @@ class HistoryCard extends HTMLElement {
             <button class="time-span-btn" data-hours="12" style="padding: 4px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 12px;">12h</button>
             <button class="time-span-btn active" data-hours="24" style="padding: 4px 12px; border: 1px solid #2b7bd3; background: #2b7bd3; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">24h</button>
           </div>
-          <div class="history-card__chart">
+          <div class="history-card__chart" style="height: 300px; padding: 16px;">
             <canvas id="history-chart-${this._config.sensor}"></canvas>
           </div>
         </div>

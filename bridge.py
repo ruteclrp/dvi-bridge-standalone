@@ -30,6 +30,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_VALUES_SCRIPT = os.path.join(SCRIPT_DIR, "read_static_values_modbustk.py")
 
+# History tracking
+HISTORY_FILE = os.path.join(SCRIPT_DIR, "sensor_history.json")
+HISTORY_MAX_AGE = 86400  # 24 hours in seconds
+HISTORY_SAMPLE_INTERVAL = 60  # Sample every 60 seconds
+
 def _refresh_static_values() -> None:
     if not os.path.isfile(STATIC_VALUES_SCRIPT):
         print("⚠️ read_static_values_modbustk.py not found; skipping static refresh.")
@@ -362,7 +367,7 @@ command_map = {
 # Map string payloads from HA selects to numeric register values
 select_map = {
     "dvi/command/cvstate": {"Off": 0, "On": 1},
-    "dvi/command/vvstate": {"Off": 0, "On": 1},   # adjust if you add "Timer"
+    "dvi/command/vvstate": {"Off": 0, "On": 1, "Timer": 2},
     "dvi/command/cvnight": {"Timer": 0, "Constant day": 1, "Constant night": 2},
     "dvi/command/vvschedule": {"Timer": 0, "Constant on": 1, "Constant off": 2},
     "dvi/command/tvstate": {"Off": 0, "Automatic": 1, "Backup operation": 2},
@@ -413,8 +418,52 @@ def on_message(client, userdata, msg):
 
 COMMANDS_FILE = os.path.join(SCRIPT_DIR, "commands.json")
 
+def load_history():
+    """Load existing history or return empty dict"""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def prune_old_data(history, cutoff_time):
+    """Remove data points older than 24 hours"""
+    for sensor in history:
+        history[sensor] = [
+            point for point in history[sensor]
+            if point["timestamp"] > cutoff_time
+        ]
+    return history
+
+def save_history_sample(sensors_dict):
+    """Append current sensor readings to history file (all temperature sensors)"""
+    history = load_history()
+    current_time = time.time()
+    cutoff_time = current_time - HISTORY_MAX_AGE
+    
+    # Add new samples (only VV temp for now)
+    for sensor_name, value in sensors_dict.items():
+        if sensor_name not in history:
+            history[sensor_name] = []
+        history[sensor_name].append({
+            "timestamp": current_time,
+            "value": value
+        })
+    
+    # Prune old data
+    history = prune_old_data(history, cutoff_time)
+    
+    # Atomic write
+    history_dir = os.path.dirname(os.path.abspath(HISTORY_FILE))
+    with tempfile.NamedTemporaryFile(mode="w", dir=history_dir, delete=False) as tmp:
+        json.dump(history, tmp)
+        tmp_path = tmp.name
+    os.replace(tmp_path, HISTORY_FILE)
+
 def process_file_commands():
-    """Read commands.json, execute aux_heating commands, remove processed (TESTING ONLY)"""
+    """Read commands.json, execute all select and number commands, remove processed"""
     if not os.path.exists(COMMANDS_FILE):
         return
     
@@ -432,31 +481,45 @@ def process_file_commands():
             domain = cmd.get("domain")
             service = cmd.get("service")
             value = cmd.get("value")
+            command_topic = cmd.get("command_topic")
             
-            # TESTING: Only process aux_heating select
-            if entity_id != "select.aux_heating":
-                print(f"⏭️ Skipping non-aux_heating command: {entity_id}")
+            if not entity_id or not domain or not service or value is None:
+                print(f"⏭️ Skipping incomplete command: {cmd}")
                 continue  # Remove from queue
             
-            if domain != "select" or service != "select_option":
-                print(f"⏭️ Skipping unsupported service: {domain}.{service}")
+            # Map command_topic to register configuration
+            cmd_cfg = command_map.get(command_topic)
+            if not cmd_cfg:
+                print(f"⚠️ Unknown command_topic: {command_topic}")
                 continue  # Remove from queue
-            
-            if value is None:
-                print(f"⏭️ Skipping command with no value")
-                continue  # Remove from queue
-            
-            # aux_heating: register 0x0F for read, 0x10F for write
-            # Registers below 0x100 are dummy reads, add 0x100 for actual writes
-            # value is already numeric (0/1/2): {0: "Off", 1: "Automatic", 2: "On"}
-            print(f"📝 File command: aux_heating = {value} ({['Off', 'Automatic', 'On'][value] if 0 <= value <= 2 else 'unknown'})")
             
             try:
-                write_fc06(0x10F, value)  # Write register = 0x0F + 0x100
-                print(f"✅ Command executed: aux_heating reg=0x10F value={value}")
+                # Handle dynamic curve registers
+                if "dynamic_curve" in cmd_cfg:
+                    reg_info = resolve_curve_register(cmd_cfg["dynamic_curve"])
+                    if reg_info is None:
+                        print(f"❌ Could not resolve register for {command_topic}")
+                        remaining_commands.append(cmd)
+                        continue
+                    
+                    register = reg_info["write"]
+                    print(f"📝 File command: {entity_id} = {value} (dynamic curve reg=0x{register:02X})")
+                    write_fc06(register, value)
+                    print(f"✅ Command executed: {entity_id} reg=0x{register:02X} value={value}")
+                
+                # Handle standard registers
+                else:
+                    register = cmd_cfg["register"]
+                    scaled = value * cmd_cfg.get("scale", 1)
+                    
+                    print(f"📝 File command: {entity_id} = {value} (reg=0x{register:02X})")
+                    write_fc06(register, scaled)
+                    print(f"✅ Command executed: {entity_id} reg=0x{register:02X} value={scaled}")
+                
                 # Successfully executed - don't keep in queue
+                
             except Exception as e:
-                print(f"❌ Failed to write aux_heating: {e}")
+                print(f"❌ Failed to write {entity_id}: {e}")
                 # Keep failed command in queue for retry
                 remaining_commands.append(cmd)
         
@@ -900,6 +963,7 @@ def _push_network_config_to_modbus() -> None:
 last_coil_update = 0
 last_fc04_update = 0
 last_misc_update = 0
+last_history_sample = 0
 
 last_coils = {}
 last_inputs = {}
@@ -1040,6 +1104,27 @@ while True:
                         last_writes[f"curve_set_{key}"] = val  # backwards compatibility
 
         last_misc_update = now
+
+    # Sample sensor history every 60 seconds (all temperature sensors)
+    if now - last_history_sample >= HISTORY_SAMPLE_INTERVAL:
+        history_sensors = {
+            "Storage tank VV": last_inputs.get("Storage tank VV"),
+            "Storage tank CV": last_inputs.get("Storage tank CV"),
+            "CV Forward": last_inputs.get("CV Forward"),
+            "CV Return": last_inputs.get("CV Return"),
+            "Outdoor": last_inputs.get("Outdoor"),
+            "Evaporator": last_inputs.get("Evaporator"),
+            "Compressor HP": last_inputs.get("Compressor HP"),
+            "Compressor LP": last_inputs.get("Compressor LP")
+        }
+        # Filter out None values
+        history_sensors = {k: v for k, v in history_sensors.items() if v is not None}
+        
+        if history_sensors:
+            save_history_sample(history_sensors)
+            sensor_list = ", ".join([f"{k}={v}°C" for k, v in history_sensors.items()])
+            print(f"📊 History sample: {sensor_list}")
+        last_history_sample = now
 
     # Final payload from cached values
     full_payload = {

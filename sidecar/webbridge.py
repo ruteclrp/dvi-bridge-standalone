@@ -94,26 +94,65 @@ def api_states():
     with state_lock:
         return jsonify(states)
 
+@app.route("/api/history/<sensor_name>")
+def api_history(sensor_name):
+    """Serve 24-hour history for a specific sensor"""
+    try:
+        # Map entity keys to friendly names used in sensor_history.json
+        entity_to_friendly = {
+            "storage_tank_vv": "Storage tank VV",
+            "storage_tank_cv": "Storage tank CV",
+            "cv_forward_temp": "CV Forward",
+            "cv_return_temp": "CV Return",
+            "outdoor_temp": "Outdoor",
+            "evaporator_temp": "Evaporator",
+            "compressor_hp_temp": "Compressor HP",
+            "compressor_lp_temp": "Compressor LP"
+        }
+        
+        # Convert entity key to friendly name for lookup
+        lookup_name = entity_to_friendly.get(sensor_name, sensor_name)
+        
+        history_path = "./../sensor_history.json"
+        if not os.path.exists(history_path):
+            return jsonify({"error": "No history data"}), 404
+        
+        with open(history_path, "r") as f:
+            history = json.load(f)
+        
+        if lookup_name not in history:
+            return jsonify({"error": f"Sensor {lookup_name} not found", "available": list(history.keys())}), 404
+        
+        return jsonify({
+            "sensor": sensor_name,
+            "data": history[lookup_name]
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/services/<domain>/<service>", methods=["POST"])
 def api_service(domain, service):
-    """Handle service calls from the web interface - TESTING: aux_heating only"""
+    """Handle service calls from the web interface for all selects and numbers"""
     try:
         data = request.get_json() or {}
         entity_id = data.get("entity_id")
         
+        print(f"🌐 API call received: {domain}.{service} for {entity_id}")
+        print(f"   Data: {data}")
+        
         if not entity_id:
             return jsonify({"error": "entity_id required"}), 400
-        
-        # TESTING: Only allow aux_heating for now
-        if entity_id != "select.aux_heating":
-            return jsonify({"error": f"Only aux_heating supported during testing"}), 400
         
         # Get entity config
         entity_cfg = ENTITY_MAP.get(entity_id)
         if not entity_cfg:
             return jsonify({"error": f"Unknown entity: {entity_id}"}), 404
         
-        # Build command - only select.select_option for aux_heating
+        # Verify domain matches
+        if entity_cfg.get("domain") != domain:
+            return jsonify({"error": f"Domain mismatch for {entity_id}"}), 400
+        
+        # Build command based on domain and service
         command = None
         
         if domain == "select" and service == "select_option":
@@ -137,6 +176,32 @@ def api_service(domain, service):
                 "command_topic": entity_cfg.get("command_topic")
             }
         
+        elif domain == "number" and service == "set_value":
+            value = data.get("value")
+            if value is None:
+                return jsonify({"error": "value required"}), 400
+            
+            # Validate range
+            attrs = entity_cfg.get("attributes", {})
+            min_val = attrs.get("min", 0)
+            max_val = attrs.get("max", 100)
+            step = attrs.get("step", 1)
+            
+            try:
+                value = float(value)
+                if value < min_val or value > max_val:
+                    return jsonify({"error": f"Value must be between {min_val} and {max_val}"}), 400
+            except ValueError:
+                return jsonify({"error": "Invalid numeric value"}), 400
+            
+            command = {
+                "entity_id": entity_id,
+                "domain": domain,
+                "service": service,
+                "value": int(value),  # Convert to int for modbus
+                "command_topic": entity_cfg.get("command_topic")
+            }
+        
         else:
             return jsonify({"error": f"Unsupported service: {domain}.{service}"}), 400
         
@@ -154,6 +219,7 @@ def api_service(domain, service):
 
 def write_command(command):
     """Append command to commands.json for bridge.py to process (atomic write)"""
+    print(f"📝 Writing command to {COMMANDS_PATH}: {command}")
     with commands_lock:
         commands = []
         
@@ -167,11 +233,15 @@ def write_command(command):
             except:
                 commands = []
         
+        print(f"   Existing commands in queue: {len(commands)}")
+        
         # Add timestamp
         command["timestamp"] = time.time()
         
         # Append new command
         commands.append(command)
+        
+        print(f"   Total commands after append: {len(commands)}")
         
         # Atomic write: write to temp file, then rename
         commands_dir = os.path.dirname(os.path.abspath(COMMANDS_PATH))
@@ -180,6 +250,7 @@ def write_command(command):
             tmp_path = tmp.name
         
         os.replace(tmp_path, COMMANDS_PATH)
+        print(f"✅ Command written to {COMMANDS_PATH}")
 
 # -----------------------------------------------------------------------------
 # Main

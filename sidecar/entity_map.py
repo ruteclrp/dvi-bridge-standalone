@@ -208,9 +208,9 @@ ENTITY_MAP = {
     "domain": "select",
     "command_topic": "dvi/command/tvstate",
     "attributes": {
-      "options": ["Off", "Automatic", "On"]
+      "options": ["Off", "Automatic", "Backup operation"]
     },
-    "mapping": {0: "Off", 1: "Automatic", 2: "On"}
+    "mapping": {0: "Off", 1: "Automatic", 2: "Backup operation"}
   },
   "select.central_heating_config": {
     "source": ("write_registers", "central_heating_config"),
@@ -235,7 +235,7 @@ ENTITY_MAP = {
   "number.curve_set_minus12": {
     "source": ("write_registers", "curve_set_-12_read"),
     "domain": "number",
-    "command_topic": "dvi/command/curvesetminus12",
+    "command_topic": "dvi/command/curveset-12",
     "attributes": {
       "min": 20,
       "max": 60,
@@ -246,7 +246,7 @@ ENTITY_MAP = {
   "number.curve_set_plus12": {
     "source": ("write_registers", "curve_set_12_read"),
     "domain": "number",
-    "command_topic": "dvi/command/curvesetplus12",
+    "command_topic": "dvi/command/curveset12",
     "attributes": {
       "min": 20,
       "max": 60,

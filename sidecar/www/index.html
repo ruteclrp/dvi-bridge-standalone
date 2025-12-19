@@ -155,6 +155,7 @@
   <script type="module">
     import "./dvi-card/dvi-lv-heatpump-card.js";
     import "./dvi-card/dvi-lv/heat_curve_card.js";
+    import "./dvi-card/dvi-lv/history_card.js";
     import { HassAdapter } from "./hass-adapter.js";
 
     window.addEventListener("DOMContentLoaded", async () => {
@@ -193,25 +194,23 @@
         cv_max_number: "number.cv_max",
 
         info_entities: [
-          "sensor.em23_energy_total", 
+          "sensor.em23_energy", 
           "sensor.em23_power",
           "sensor.comp_hours",
           "sensor.vv_hours",
           "sensor.heating_hours",
         ],
         cv_entities: [
-          "sensor.cv_forward_temp",
-          "sensor.cv_return_temp",
           "select.cv_mode",
+          "number.cv_curve",
           "select.cv_night",
         ],
         vv_entities: [
-          "sensor.storage_tank_vv_temp",
+          "number.vv_setpoint",
           "select.vv_mode",
           "select.vv_schedule",
         ],
         aux_entities: [
-          "binary_sensor.heating_element",
           "select.aux_heating",
         ],
       });
@@ -222,6 +221,9 @@
 
       // Wire up popup functionality
       setupPopupHandler(hass);
+      
+      // Override temperature sensor click handlers to show history popups
+      overrideTempSensorClicks(card, hass);
 
       // Apply Chart.js dark mode wrapper when Chart.js loads
       const chartInterval = setInterval(() => {
@@ -286,6 +288,120 @@
       console.log('✅ Chart.js dark mode applied');
     }
 
+    // Override temperature sensor click handlers to show history popups
+    function overrideTempSensorClicks(card, hass) {
+      console.log('🔧 overrideTempSensorClicks called');
+      const shadowRoot = card.shadowRoot;
+      if (!shadowRoot) {
+        console.log('❌ No shadowRoot found');
+        return;
+      }
+      console.log('✅ shadowRoot found');
+      
+      const friendlyNames = {
+        'outdoor': 'Outdoor',
+        'tankCv': 'Storage tank CV',
+        'tankVv': 'Storage tank VV',
+        'cvForward': 'CV Forward',
+        'cvReturn': 'CV Return',
+        'evap': 'Evaporator',
+        'hp': 'Compressor HP',
+        'lp': 'Compressor LP'
+      };
+      
+      // Map camelCase keys to entity map keys for API calls
+      const keyToEntityMap = {
+        'outdoor': 'outdoor_temp',
+        'tankCv': 'storage_tank_cv',
+        'tankVv': 'storage_tank_vv',
+        'cvForward': 'cv_forward_temp',
+        'cvReturn': 'cv_return_temp',
+        'evap': 'evaporator_temp',
+        'hp': 'compressor_hp_temp',
+        'lp': 'compressor_lp_temp'
+      };
+      
+      // Function to override click handlers on temperature labels
+      function overrideHandlers() {
+        const diagram = shadowRoot.querySelector('.diagram');
+        if (!diagram) {
+          console.log('⏳ Diagram not yet ready');
+          return;
+        }
+        
+        // Find all temperature sensor labels
+        const allLabels = diagram.querySelectorAll('.diagram-label');
+        const clickableLabels = diagram.querySelectorAll('.diagram-label.clickable');
+        console.log(`🔍 Found ${allLabels.length} total labels, ${clickableLabels.length} clickable`);
+        
+        let overriddenCount = 0;
+        
+        clickableLabels.forEach(label => {
+          const dataKey = label.getAttribute('data-key');
+          console.log(`  - Label with data-key: ${dataKey}, clickable: ${label.classList.contains('clickable')}`);
+          
+          // Check if this is a temperature sensor key
+          if (!dataKey || !friendlyNames[dataKey]) {
+            console.log(`    ⏭️ Skipping (not in temperature sensor list)`);
+            return;
+          }
+          
+          // Check if already overridden
+          if (label._historyOverridden) {
+            console.log(`    ⏭️ Already overridden`);
+            return;
+          }
+          label._historyOverridden = true;
+          
+          // Store the old handler for debugging
+          const oldHandler = label.onclick;
+          console.log(`    📝 Old handler: ${oldHandler ? 'exists' : 'null'}`);
+          
+          // Override the click handler
+          label.onclick = (e) => {
+            console.log(`🖱️ Click detected on ${dataKey}!`);
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const friendlyName = friendlyNames[dataKey];
+            const sensorKey = keyToEntityMap[dataKey];
+            
+            hass.popupCallback({
+              title: `${friendlyName} - 24h History`,
+              content: {
+                type: "custom:history-card",
+                sensor: sensorKey,
+                title: friendlyName
+              }
+            });
+          };
+          
+          console.log(`    ✅ Override installed for ${dataKey}`);
+          overriddenCount++;
+        });
+        
+        if (overriddenCount > 0) {
+          console.log(`✅ Overrode ${overriddenCount} temperature sensor click handlers`);
+        }
+      }
+      
+      // Use MutationObserver to detect when diagram is populated
+      const observer = new MutationObserver((mutations) => {
+        console.log(`🔄 MutationObserver triggered (${mutations.length} mutations)`);
+        overrideHandlers();
+      });
+      
+      observer.observe(shadowRoot, {
+        childList: true,
+        subtree: true
+      });
+      
+      console.log('👀 MutationObserver installed');
+      
+      // Also run immediately in case diagram is already there
+      overrideHandlers();
+    }
+
     // Popup handler setup - intercepts browser_mod.popup calls
     function setupPopupHandler(hass) {
       const modal = document.getElementById("modal-overlay");
@@ -302,6 +418,35 @@
       // Set popup callback to intercept browser_mod.popup service calls
       hass.popupCallback = (data) => {
         const { title, content } = data;
+        
+        // Handle history card popup
+        if (content && content.type === "custom:history-card") {
+          modalTitle.textContent = title || "Temperature History";
+          
+          (async () => {
+            // Ensure Chart.js is loaded
+            if (!window.Chart) {
+              await import("https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js");
+            }
+            
+            // Apply dark mode wrapper
+            applyChartDarkMode();
+            
+            // Create history card
+            const historyCard = document.createElement("history-card");
+            historyCard.setConfig({
+              sensor: content.sensor,
+              title: content.title || title
+            });
+            historyCard.hass = hass;
+            
+            modalBody.innerHTML = "";
+            modalBody.appendChild(historyCard);
+          })();
+          
+          modal.classList.add("active");
+          return;
+        }
         
         // Handle heat-curve card popup (custom card)
         if (content && content.type === "custom:heat-curve-card") {
@@ -432,8 +577,11 @@
         style.textContent = `
           :host { 
             --disabled-text-color: #999;
+            --primary-text-color: #000 !important;
+            --chip-text-color: #000 !important;
+            --chip-active-text: #000 !important;
             --state-climate-heat-color: #ff9800;
-            --state-water-heater-heat-color: #03a9f4;
+            --state-water-heater-heat-color: #ff9800;
             --warning-color: #fdd835;
             --accent-color: #03a9f4;
           }
@@ -441,6 +589,25 @@
           .diagram-icon, .diagram-element { color: inherit; }
         `;
         root.appendChild(style);
+        
+        // Observer to fix chip label colors based on active/inactive state
+        const updateChipLabels = () => {
+          root.querySelectorAll('.chip-label, .chip-value').forEach(el => {
+            const chip = el.closest('.mode-chip');
+            if (chip && chip.classList.contains('mode-chip--inactive')) {
+              el.style.color = '#999';
+            } else {
+              el.style.color = '#000';
+            }
+          });
+        };
+        
+        const observer = new MutationObserver(updateChipLabels);
+        observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+        
+        // Initial update
+        setTimeout(updateChipLabels, 0);
+        
         return root;
       };
     })();

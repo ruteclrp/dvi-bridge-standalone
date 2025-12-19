@@ -91,11 +91,29 @@ Home Assistant will also receive MQTT discovery messages so entities are created
 
 ### 7. Install the systemd service (auto‑start on boot)
 
-Copy the example service file and edit it:
+Copy the example service files and edit them:
 
 ```bash
-sudo cp systemd/bridge.service.example /etc/systemd/system/bridge.service
-sudo nano /etc/systemd/system/bridge.service
+# Copy and customize the files
+cp systemd/bridge.service.example systemd/bridge.service
+cp systemd/webbridge.service.example systemd/webbridge.service
+
+# Edit both files to replace <user> with your actual username
+nano systemd/bridge.service
+nano systemd/webbridge.service
+
+# Copy to systemd
+sudo cp systemd/bridge.service /etc/systemd/system/
+sudo cp systemd/webbridge.service /etc/systemd/system/
+
+# Enable and start both services
+sudo systemctl daemon-reload
+sudo systemctl enable bridge.service webbridge.service
+sudo systemctl start bridge.service webbridge.service
+
+# Check status
+sudo systemctl status bridge.service webbridge.service
+
 ```
 
 Replace the contents with:

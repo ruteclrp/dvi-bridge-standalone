@@ -1115,14 +1115,15 @@ while True:
             "Outdoor": last_inputs.get("Outdoor"),
             "Evaporator": last_inputs.get("Evaporator"),
             "Compressor HP": last_inputs.get("Compressor HP"),
-            "Compressor LP": last_inputs.get("Compressor LP")
+            "Compressor LP": last_inputs.get("Compressor LP"),
+            "Defrost": 1 if last_coils.get("4-way valve defrost") else 0
         }
-        # Filter out None values
+        # Filter out None values (but keep 0 for defrost)
         history_sensors = {k: v for k, v in history_sensors.items() if v is not None}
         
         if history_sensors:
             save_history_sample(history_sensors)
-            sensor_list = ", ".join([f"{k}={v}°C" for k, v in history_sensors.items()])
+            sensor_list = ", ".join([f"{k}={v}°C" if k != "Defrost" else f"{k}={'ON' if v else 'OFF'}" for k, v in history_sensors.items()])
             print(f"📊 History sample: {sensor_list}")
         last_history_sample = now
 

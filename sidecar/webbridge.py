@@ -107,7 +107,8 @@ def api_history(sensor_name):
             "outdoor_temp": "Outdoor",
             "evaporator_temp": "Evaporator",
             "compressor_hp_temp": "Compressor HP",
-            "compressor_lp_temp": "Compressor LP"
+            "compressor_lp_temp": "Compressor LP",
+            "defrost": "Defrost"
         }
         
         # Convert entity key to friendly name for lookup

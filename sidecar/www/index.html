@@ -383,6 +383,28 @@
         if (overriddenCount > 0) {
           console.log(`✅ Overrode ${overriddenCount} temperature sensor click handlers`);
         }
+        
+        // Also handle defrost icon
+        const defrostIcon = diagram.querySelector('[data-icon-key="defrost"]');
+        if (defrostIcon && !defrostIcon._defrostOverridden) {
+          defrostIcon._defrostOverridden = true;
+          defrostIcon.classList.add('clickable');
+          defrostIcon.onclick = (e) => {
+            console.log('🖱️ Click detected on defrost icon!');
+            e.preventDefault();
+            e.stopPropagation();
+            
+            hass.popupCallback({
+              title: 'Defrost History - 24h',
+              content: {
+                type: "custom:history-card",
+                sensor: 'defrost',
+                title: 'Defrost Activity'
+              }
+            });
+          };
+          console.log('✅ Defrost icon click handler installed');
+        }
       }
       
       // Use MutationObserver to detect when diagram is populated

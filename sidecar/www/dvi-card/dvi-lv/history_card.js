@@ -24,6 +24,24 @@ class HistoryCard extends HTMLElement {
     
     console.log(`📊 Loading history for sensor: ${this._config.sensor}`);
     
+    // Special handling for defrost sensor
+    if (this._config.sensor === 'defrost') {
+      try {
+        const response = await fetch('/api/history/defrost');
+        if (response.ok) {
+          const data = await response.json();
+          this._defrostData = data.data || [];
+          this.updateDefrostOnly();
+        } else {
+          this.showNoData();
+        }
+      } catch (err) {
+        console.error("❌ Failed to load defrost history:", err);
+        this.showError(err.message);
+      }
+      return;
+    }
+    
     try {
       const url = `/api/history/${encodeURIComponent(this._config.sensor)}`;
       console.log(`🌐 Fetching: ${url}`);
@@ -37,6 +55,16 @@ class HistoryCard extends HTMLElement {
       if (data.data && data.data.length > 0) {
         console.log(`✅ Got ${data.data.length} data points`);
         this._fullData = data.data; // Store full dataset
+        
+        // Also fetch defrost history for evaporator sensor
+        if (this._config.sensor === 'evaporator_temp') {
+          const defrostResponse = await fetch('/api/history/defrost');
+          if (defrostResponse.ok) {
+            const defrostData = await defrostResponse.json();
+            this._defrostData = defrostData.data || [];
+          }
+        }
+        
         this.updateChart();
       } else {
         console.log(`⚠️ No data available`);
@@ -46,6 +74,14 @@ class HistoryCard extends HTMLElement {
       console.error("❌ Failed to load history:", err);
       this.showError(err.message);
     }
+  }
+  
+  updateDefrostOnly() {
+    if (!this._defrostData) return;
+    
+    const now = Date.now() / 1000;
+    const cutoff = now - (this._timeSpan * 3600);
+    this.renderDefrostTimeline(cutoff, now);
   }
   
   updateChart() {
@@ -58,9 +94,105 @@ class HistoryCard extends HTMLElement {
     
     if (filteredData.length > 0) {
       this.renderChart(filteredData);
+      // Show defrost timeline for evaporator
+      if (this._config.sensor === 'evaporator_temp' && this._defrostData) {
+        this.renderDefrostTimeline(cutoff, now);
+      }
     } else {
       this.showNoData();
     }
+  }
+  
+  renderDefrostTimeline(startTime, endTime) {
+    if (!this._defrostData || this._defrostData.length === 0) return;
+    
+    const barsContainer = this.querySelector(`#defrost-bars-${this._config.sensor}`);
+    if (!barsContainer) return;
+    
+    // Clear existing bars
+    barsContainer.innerHTML = '';
+    
+    const duration = endTime - startTime;
+    
+    // Filter defrost data to selected time span
+    const filteredDefrost = this._defrostData.filter(point => 
+      point.timestamp >= startTime && point.timestamp <= endTime
+    );
+    
+    // Convert to periods (start/end of active defrost)
+    const periods = [];
+    let periodStart = null;
+    
+    for (let i = 0; i < filteredDefrost.length; i++) {
+      const current = filteredDefrost[i];
+      const isActive = current.value === 1;
+      
+      if (isActive && periodStart === null) {
+        periodStart = current.timestamp;
+      } else if (!isActive && periodStart !== null) {
+        periods.push({ start: periodStart, end: current.timestamp });
+        periodStart = null;
+      }
+    }
+    
+    // Close any open period
+    if (periodStart !== null) {
+      periods.push({ start: periodStart, end: endTime });
+    }
+    
+    // Render bars for each period
+    periods.forEach(period => {
+      const startPercent = ((period.start - startTime) / duration) * 100;
+      const widthPercent = ((period.end - period.start) / duration) * 100;
+      
+      const bar = document.createElement('div');
+      bar.style.cssText = `
+        position: absolute;
+        left: ${startPercent}%;
+        width: ${widthPercent}%;
+        height: 100%;
+        background: #03a9f4;
+        opacity: 0.8;
+      `;
+      barsContainer.appendChild(bar);
+    });
+    
+    // Add time labels below the bar
+    const timelineContainer = this.querySelector(`#defrost-timeline-${this._config.sensor}`);
+    if (!timelineContainer) return;
+    
+    // Remove existing labels
+    const existingLabels = timelineContainer.querySelector('.defrost-time-labels');
+    if (existingLabels) existingLabels.remove();
+    
+    // Create time labels container
+    const labelsDiv = document.createElement('div');
+    labelsDiv.className = 'defrost-time-labels';
+    const isDefrostOnly = this._config.sensor === 'defrost';
+    labelsDiv.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      padding-top: 4px;
+      font-size: 10px;
+      color: #999;
+      padding-left: ${isDefrostOnly ? '0' : '60px'};
+      padding-right: 12px;
+    `;
+    
+    // Generate time labels - match chart's maxTicksLimit of 12
+    const numLabels = Math.min(12, Math.max(2, Math.ceil(this._timeSpan)));
+    
+    for (let i = 0; i < numLabels; i++) {
+      const timestamp = startTime + (duration * i / (numLabels - 1));
+      const date = new Date(timestamp * 1000);
+      const timeStr = date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+      
+      const label = document.createElement('span');
+      label.textContent = timeStr;
+      labelsDiv.appendChild(label);
+    }
+    
+    timelineContainer.appendChild(labelsDiv);
   }
   
   setTimeSpan(hours) {
@@ -81,10 +213,19 @@ class HistoryCard extends HTMLElement {
         btn.style.color = '#333';
       }
     });
-    this.updateChart();
+    
+    // Update chart or defrost timeline
+    if (this._config.sensor === 'defrost') {
+      this.updateDefrostOnly();
+    } else {
+      this.updateChart();
+    }
   }
 
   render() {
+    const isDefrostOnly = this._config.sensor === 'defrost';
+    const showDefrostTimeline = isDefrostOnly || this._config.sensor === 'evaporator_temp';
+    
     this.innerHTML = `
       <ha-card>
         <div class="history-card">
@@ -95,9 +236,36 @@ class HistoryCard extends HTMLElement {
             <button class="time-span-btn" data-hours="12" style="padding: 4px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 12px;">12h</button>
             <button class="time-span-btn active" data-hours="24" style="padding: 4px 12px; border: 1px solid #2b7bd3; background: #2b7bd3; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">24h</button>
           </div>
+          ${isDefrostOnly ? `
+          <div class="history-card__defrost-timeline" id="defrost-timeline-${this._config.sensor}" style="padding: 40px 16px;">
+            <div style="font-size: 13px; color: #666; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+              <span>Defrost periods:</span>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <div style="width: 16px; height: 12px; background: #03a9f4; border-radius: 2px;"></div>
+                <span style="font-size: 12px;">Active</span>
+              </div>
+            </div>
+            <div id="defrost-bars-${this._config.sensor}" style="height: 48px; background: #f5f5f5; border-radius: 4px; position: relative; overflow: hidden;"></div>
+          </div>
+          ` : `
           <div class="history-card__chart" style="height: 300px; padding: 16px;">
             <canvas id="history-chart-${this._config.sensor}"></canvas>
           </div>
+          ${showDefrostTimeline ? `
+          <div class="history-card__defrost-timeline" id="defrost-timeline-${this._config.sensor}" style="padding: 8px 16px; border-top: 1px solid rgba(0,0,0,0.1);">
+            <div style="font-size: 11px; color: #666; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
+              <span>Defrost periods:</span>
+              <div style="display: flex; gap: 8px; align-items: center;">
+                <div style="width: 16px; height: 12px; background: #03a9f4; border-radius: 2px;"></div>
+                <span style="font-size: 10px;">Active</span>
+              </div>
+            </div>
+            <div style="padding-left: 60px; padding-right: 12px;">
+              <div id="defrost-bars-${this._config.sensor}" style="height: 24px; background: #f5f5f5; border-radius: 4px; position: relative; overflow: hidden;"></div>
+            </div>
+          </div>
+          ` : ''}
+          `}
         </div>
       </ha-card>
     `;

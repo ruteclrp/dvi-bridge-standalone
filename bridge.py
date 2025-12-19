@@ -33,7 +33,7 @@ STATIC_VALUES_SCRIPT = os.path.join(SCRIPT_DIR, "read_static_values_modbustk.py"
 # History tracking
 HISTORY_FILE = os.path.join(SCRIPT_DIR, "sensor_history.json")
 HISTORY_MAX_AGE = 86400  # 24 hours in seconds
-HISTORY_SAMPLE_INTERVAL = 60  # Sample every 60 seconds
+HISTORY_SAMPLE_INTERVAL = 15  # Sample every 15 seconds
 
 def _refresh_static_values() -> None:
     if not os.path.isfile(STATIC_VALUES_SCRIPT):

@@ -298,27 +298,17 @@
       }
       console.log('✅ shadowRoot found');
       
-      const friendlyNames = {
-        'outdoor': 'Outdoor',
-        'tankCv': 'Storage tank CV',
-        'tankVv': 'Storage tank VV',
-        'cvForward': 'CV Forward',
-        'cvReturn': 'CV Return',
-        'evap': 'Evaporator',
-        'hp': 'Compressor HP',
-        'lp': 'Compressor LP'
-      };
-      
-      // Map camelCase keys to entity map keys for API calls
+      // Map camelCase keys to full entity IDs (for getting friendly names)
+      // and to history API keys (for fetching history data)
       const keyToEntityMap = {
-        'outdoor': 'outdoor_temp',
-        'tankCv': 'storage_tank_cv',
-        'tankVv': 'storage_tank_vv',
-        'cvForward': 'cv_forward_temp',
-        'cvReturn': 'cv_return_temp',
-        'evap': 'evaporator_temp',
-        'hp': 'compressor_hp_temp',
-        'lp': 'compressor_lp_temp'
+        'outdoor': { entityId: 'sensor.outdoor_temp', historyKey: 'outdoor_temp' },
+        'tankCv': { entityId: 'sensor.storage_tank_cv_temp', historyKey: 'storage_tank_cv' },
+        'tankVv': { entityId: 'sensor.storage_tank_vv_temp', historyKey: 'storage_tank_vv' },
+        'cvForward': { entityId: 'sensor.cv_forward_temp', historyKey: 'cv_forward_temp' },
+        'cvReturn': { entityId: 'sensor.cv_return_temp', historyKey: 'cv_return_temp' },
+        'evap': { entityId: 'sensor.evaporator_temp', historyKey: 'evaporator_temp' },
+        'hp': { entityId: 'sensor.compressor_hp', historyKey: 'compressor_hp_temp' },
+        'lp': { entityId: 'sensor.compressor_lp', historyKey: 'compressor_lp_temp' }
       };
       
       // Function to override click handlers on temperature labels
@@ -341,7 +331,8 @@
           console.log(`  - Label with data-key: ${dataKey}, clickable: ${label.classList.contains('clickable')}`);
           
           // Check if this is a temperature sensor key
-          if (!dataKey || !friendlyNames[dataKey]) {
+          const mapping = keyToEntityMap[dataKey];
+          if (!dataKey || !mapping) {
             console.log(`    ⏭️ Skipping (not in temperature sensor list)`);
             return;
           }
@@ -363,14 +354,15 @@
             e.preventDefault();
             e.stopPropagation();
             
-            const friendlyName = friendlyNames[dataKey];
-            const sensorKey = keyToEntityMap[dataKey];
+            // Get friendly name from entity attributes
+            const entityState = hass.states[mapping.entityId];
+            const friendlyName = entityState?.attributes?.friendly_name || mapping.entityId;
             
             hass.popupCallback({
-              title: `${friendlyName} - 24h History`,
+              title: `${friendlyName} - 24 timers historik`,
               content: {
                 type: "custom:history-card",
-                sensor: sensorKey,
+                sensor: mapping.historyKey,
                 title: friendlyName
               }
             });
@@ -395,7 +387,7 @@
             e.stopPropagation();
             
             hass.popupCallback({
-              title: 'Defrost History - 24h',
+              title: 'Afrimning - 24 timers historik',
               content: {
                 type: "custom:history-card",
                 sensor: 'defrost',

@@ -28,6 +28,28 @@ export function buildDiagramView({ hass, config, imageBase }) {
 			? hass.states[entityId].attributes.unit_of_measurement || ""
 			: "";
 
+	// Helper function to find entity by name (searches both 'name' and 'friendly_name' attributes)
+	const findEntityByName = (searchName) => {
+		if (!searchName) return null;
+		for (const entityId in hass.states) {
+			const entity = hass.states[entityId];
+			// Check if searchName matches or is contained in 'name' or 'friendly_name' attributes
+			// This handles both sidecar (exact match) and HA (with device prefix like "DVI LV12 Circ. pump CV")
+			const name = entity.attributes?.name;
+			const friendlyName = entity.attributes?.friendly_name;
+			if (name === searchName || friendlyName === searchName ||
+			    (friendlyName && friendlyName.includes(searchName))) {
+				return entityId;
+			}
+		}
+		return null;
+	};
+
+	const getStateByName = (searchName) => {
+		const entityId = findEntityByName(searchName);
+		return entityId ? getState(entityId) : null;
+	};
+
 	const showUnit = config.show_temp_unit ?? false;
 
 	const stateEntityMap = {
@@ -76,10 +98,10 @@ export function buildDiagramView({ hass, config, imageBase }) {
 	const auxHeating = config.aux_heating ? getState(config.aux_heating) : null;
 
 	// heating element sensor used when aux select = "Automatic"
-	const heatingElementState = getState("binary_sensor.heating_element");
+	const heatingElementState = getStateByName("Heating element");
 
 	// circulation pump sensor used to show/hide CV pump & CV flow gifs
-	const circPumpSensorState = getState("binary_sensor.circ_pump_cv");
+	const circPumpSensorState = getStateByName("Circ. pump CV");
     
 	// Build aux icon HTML according to rules:
 	// - "Off" -> don't show

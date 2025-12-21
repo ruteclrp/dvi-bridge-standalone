@@ -31,9 +31,13 @@ commands_lock = threading.Lock()
 
 # Initialize empty HA-style state objects
 for entity_id, cfg in ENTITY_MAP.items():
+    attrs = cfg.get("attributes", {}).copy()  # Copy to include friendly_name
+    # Add source name as 'name' attribute for compatibility with MQTT discovery naming
+    source_group, source_key = cfg["source"]
+    attrs["name"] = source_key
     states[entity_id] = {
         "state": None,
-        "attributes": cfg.get("attributes", {}).copy()  # Copy to include friendly_name
+        "attributes": attrs
     }
 
 def load_state_loop():

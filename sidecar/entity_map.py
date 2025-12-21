@@ -5,7 +5,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "°C",
-      "device_class": "temperature"
+      "device_class": "temperature",
+      "friendly_name": "CV Fremløb"
     }
   },
   "sensor.cv_return_temp": {
@@ -13,7 +14,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "°C",
-      "device_class": "temperature"
+      "device_class": "temperature",
+      "friendly_name": "CV Retur"
     }
   },
   "sensor.storage_tank_vv_temp": {
@@ -21,7 +23,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "°C",
-      "device_class": "temperature"
+      "device_class": "temperature",
+      "friendly_name": "VV buffertank"
     }
   },
   "sensor.storage_tank_cv_temp": {
@@ -29,7 +32,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "°C",
-      "device_class": "temperature"
+      "device_class": "temperature",
+      "friendly_name": "CV Buffertank"
     }
   },
   "sensor.evaporator_temp": {
@@ -37,7 +41,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "°C",
-      "device_class": "temperature"
+      "device_class": "temperature",
+      "friendly_name": "Fordamper"
     }
   },
   "sensor.outdoor_temp": {
@@ -45,7 +50,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "°C",
-      "device_class": "temperature"
+      "device_class": "temperature",
+      "friendly_name": "Udendørs Temperatur"
     }
   },
   "sensor.compressor_hp": {
@@ -53,7 +59,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "°C",
-      "device_class": "temperature"
+      "device_class": "temperature",
+      "friendly_name": "Kompressor HP"
     }
   },
   "sensor.compressor_lp": {
@@ -61,7 +68,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "°C",
-      "device_class": "temperature"
+      "device_class": "temperature",
+      "friendly_name": "Kompressor LP"
     }
   },
   "sensor.em23_power": {
@@ -69,7 +77,8 @@ ENTITY_MAP = {
     "domain": "sensor",
     "attributes": {
       "unit_of_measurement": "kW",
-      "device_class": "power"
+      "device_class": "power",
+      "friendly_name": "Optaget Effekt"
     }
   },
   "sensor.em23_energy": {
@@ -78,7 +87,8 @@ ENTITY_MAP = {
     "attributes": {
       "unit_of_measurement": "kWh",
       "device_class": "energy",
-      "state_class": "total_increasing"
+      "state_class": "total_increasing",
+      "friendly_name": "Total Energiforbrug"
     }
   },
   # FC01 coils
@@ -86,84 +96,96 @@ ENTITY_MAP = {
     "source": ("coils", "Soft starter Compressor"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "Kompressor"
     }
   },
   "binary_sensor.three_way_shunt_vv_open_close": {
     "source": ("coils", "3-Way shunt VV open/close"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "3-Way Shunt VV"
     }
   },
   "binary_sensor.start_stop_expansion_valve": {
     "source": ("coils", "Start/stop expansion valve"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "Expansionsventil"
     }
   },
   "binary_sensor.heating_element": {
     "source": ("coils", "Heating element"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "Tilskudsvarme"
     }
   },
   "binary_sensor.circ_pump_warm_side": {
     "source": ("coils", "Circ. pump warm side"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "Cirkulationspumpe varm side"
     }
   },
   "binary_sensor.el_tracing_cv_drain": {
     "source": ("coils", "El-tracing CV/drain"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "El-tracing CV/Dræn"
     }
   },
   "binary_sensor.four_way_valve_defrost": {
     "source": ("coils", "4-way valve defrost"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "Afrimningsventil"
     }
   },
   "binary_sensor.liquid_injection_solenoid_valve": {
     "source": ("coils", "Liquid injection solenoid valve"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "Væskeindsprøjtning"
     }
   },
   "binary_sensor.three_way_shunt_cv_open": {
     "source": ("coils", "3-way shunt CV open"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "3-vejs Shunt CV åben"
     }
   },
   "binary_sensor.three_way_shunt_cv_close": {
     "source": ("coils", "3-way shunt CV close"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "3-vejs Shunt CV lukke"
     }
   },
   "binary_sensor.circ_pump_cv": {
     "source": ("coils", "Circ. pump CV"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "running"
+      "device_class": "running",
+      "friendly_name": "CV Cirkulationspumpe"
     }
   },
   "binary_sensor.sum_alarm_failure": {
     "source": ("coils", "Sum alarm failure"),
     "domain": "binary_sensor",
     "attributes": {
-      "device_class": "problem"
+      "device_class": "problem",
+      "friendly_name": "System Alarm"
     }
   },
   # FC06 selects
@@ -172,7 +194,8 @@ ENTITY_MAP = {
     "domain": "select",
     "command_topic": "dvi/command/cvstate",
     "attributes": {
-      "options": ["Off", "On"]
+      "options": ["Off", "On"],
+      "friendly_name": "CV Mode"
     },
     "mapping": {0: "Off", 1: "On"}
   },
@@ -181,7 +204,8 @@ ENTITY_MAP = {
     "domain": "select",
     "command_topic": "dvi/command/cvnight",
     "attributes": {
-      "options": ["Timer", "Constant day", "Constant night"]
+      "options": ["Timer", "Constant day", "Constant night"],
+      "friendly_name": "Varmeplan"
     },
     "mapping": {0: "Timer", 1: "Constant day", 2: "Constant night"}
   },
@@ -190,16 +214,18 @@ ENTITY_MAP = {
     "domain": "select",
     "command_topic": "dvi/command/vvstate",
     "attributes": {
-      "options": ["Off", "On", "Timer"]
+      "options": ["Off", "On"],
+      "friendly_name": "VV Mode"
     },
-    "mapping": {0: "Off", 1: "On", 2: "Timer"}
+    "mapping": {0: "Off", 1: "On"}
   },
   "select.vv_schedule": {
     "source": ("write_registers", "vv_schedule"),
     "domain": "select",
     "command_topic": "dvi/command/vvschedule",
     "attributes": {
-      "options": ["Timer", "Constant on", "Constant off"]
+      "options": ["Timer", "Constant on", "Constant off"],
+      "friendly_name": "VV Plan"
     },
     "mapping": {0: "Timer", 1: "Constant on", 2: "Constant off"}
   },
@@ -208,7 +234,8 @@ ENTITY_MAP = {
     "domain": "select",
     "command_topic": "dvi/command/tvstate",
     "attributes": {
-      "options": ["Off", "Automatic", "Backup operation"]
+      "options": ["Off", "Automatic", "Backup operation"],
+      "friendly_name": "Tilskudsvarme"
     },
     "mapping": {0: "Off", 1: "Automatic", 2: "Backup operation"}
   },
@@ -217,7 +244,8 @@ ENTITY_MAP = {
     "domain": "select",
     "command_topic": "dvi/command/centralheatingconfig",
     "attributes": {
-      "options": ["Under floor heating w/o shunt", "Under floor heating w. shunt", "Radiator and mixed systems"]
+      "options": ["Under floor heating w/o shunt", "Under floor heating w. shunt", "Radiator and mixed systems"],
+      "friendly_name": "Varmesystemtype"
     },
     "mapping": {0: "Under floor heating w/o shunt", 1: "Under floor heating w. shunt", 2: "Radiator and mixed systems"}
   },
@@ -229,7 +257,8 @@ ENTITY_MAP = {
     "attributes": {
       "min": 1,
       "max": 20,
-      "step": 1
+      "step": 1,
+      "friendly_name": "Varmekurve"
     }
   },
   "number.curve_set_minus12": {
@@ -240,7 +269,8 @@ ENTITY_MAP = {
       "min": 20,
       "max": 60,
       "step": 1,
-      "unit_of_measurement": "°C"
+      "unit_of_measurement": "°C",
+      "friendly_name": "Kurve 10 ved -12°C"
     }
   },
   "number.curve_set_plus12": {
@@ -251,7 +281,8 @@ ENTITY_MAP = {
       "min": 20,
       "max": 60,
       "step": 1,
-      "unit_of_measurement": "°C"
+      "unit_of_measurement": "°C",
+      "friendly_name": "Kurve 10 ved +12°C"
     }
   },
   "number.vv_setpoint": {
@@ -262,7 +293,8 @@ ENTITY_MAP = {
       "min": 10,
       "max": 60,
       "step": 1,
-      "unit_of_measurement": "°C"
+      "unit_of_measurement": "°C",
+      "friendly_name": "VV Setpunkt"
     }
   },
   "number.cv_max": {
@@ -273,7 +305,8 @@ ENTITY_MAP = {
       "min": 20,
       "max": 55,
       "step": 1,
-      "unit_of_measurement": "°C"
+      "unit_of_measurement": "°C",
+      "friendly_name": "Maksimum CV Temperatur"
     }
   },
   "number.cv_min": {
@@ -284,7 +317,8 @@ ENTITY_MAP = {
       "min": 10,
       "max": 45,
       "step": 1,
-      "unit_of_measurement": "°C"
+      "unit_of_measurement": "°C",
+      "friendly_name": "Minimum CV Temperatur"
     }
   },
   # FC06 sensors
@@ -294,7 +328,8 @@ ENTITY_MAP = {
     "attributes": {
       "unit_of_measurement": "°C",
       "device_class": "temperature",
-      "state_class": "measurement"
+      "state_class": "measurement",
+      "friendly_name": "Udendørs Temperatur (Kalibrering)"
     }
   },
   "sensor.curve_temp": {
@@ -303,7 +338,8 @@ ENTITY_MAP = {
     "attributes": {
       "unit_of_measurement": "°C",
       "device_class": "temperature",
-      "state_class": "measurement"
+      "state_class": "measurement",
+      "friendly_name": "Kalkuleret kurvetemperatur"
     }
   },
   "sensor.cv_setpoint": {
@@ -312,7 +348,8 @@ ENTITY_MAP = {
     "attributes": {
       "unit_of_measurement": "°C",
       "device_class": "temperature",
-      "state_class": "measurement"
+      "state_class": "measurement",
+      "friendly_name": "CV Setpunkt"
     }
   },
   "sensor.comp_hours": {
@@ -321,7 +358,8 @@ ENTITY_MAP = {
     "attributes": {
       "unit_of_measurement": "h",
       "device_class": "duration",
-      "state_class": "total_increasing"
+      "state_class": "total_increasing",
+      "friendly_name": "Kompressor Timer"
     }
   },
   "sensor.vv_hours": {
@@ -330,7 +368,8 @@ ENTITY_MAP = {
     "attributes": {
       "unit_of_measurement": "h",
       "device_class": "duration",
-      "state_class": "total_increasing"
+      "state_class": "total_increasing",
+      "friendly_name": "VV Timer"
     }
   },
   "sensor.heating_hours": {
@@ -339,7 +378,8 @@ ENTITY_MAP = {
     "attributes": {
       "unit_of_measurement": "h",
       "device_class": "duration",
-      "state_class": "total_increasing"
+      "state_class": "total_increasing",
+      "friendly_name": "Tilskudsvarme Timer"
     }
   }
 }

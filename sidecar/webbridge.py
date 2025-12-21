@@ -33,7 +33,7 @@ commands_lock = threading.Lock()
 for entity_id, cfg in ENTITY_MAP.items():
     states[entity_id] = {
         "state": None,
-        "attributes": cfg.get("attributes", {})
+        "attributes": cfg.get("attributes", {}).copy()  # Copy to include friendly_name
     }
 
 def load_state_loop():

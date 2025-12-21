@@ -114,7 +114,7 @@ class HeatCurveCard extends HTMLElement {
 		if (!existingCard) {
 			this.innerHTML = `
         
-        <ha-card class="heat-curve-card" header="${this._title}">
+        <ha-card class="heat-curve-card">
           <div class="heat-curve-card__chart" data-role="chart">
             <canvas data-role="curveChart"></canvas>
           </div>
@@ -122,7 +122,7 @@ class HeatCurveCard extends HTMLElement {
         </ha-card>
       `;
 		} else {
-			existingCard.setAttribute("header", this._title);
+			existingCard.removeAttribute("header");
 		}
 		this._canvas = this.querySelector('[data-role="curveChart"]');
 		this._controls = this.querySelector('[data-role="controls"]');

@@ -11,6 +11,7 @@ import warnings
 import glob
 import subprocess
 import socket  # <-- nødvendig til _get_default_gateway_linux
+import tempfile
 from typing import Optional
 
 # Find STM32 Virtual COM Port automatically
@@ -28,6 +29,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_VALUES_SCRIPT = os.path.join(SCRIPT_DIR, "read_static_values_modbustk.py")
+
+# History tracking
+HISTORY_FILE = os.path.join(SCRIPT_DIR, "sensor_history.json")
+HISTORY_MAX_AGE = 86400  # 24 hours in seconds
+HISTORY_SAMPLE_INTERVAL = 15  # Sample every 15 seconds
 
 def _refresh_static_values() -> None:
     if not os.path.isfile(STATIC_VALUES_SCRIPT):
@@ -51,6 +57,31 @@ def _refresh_static_values() -> None:
         load_dotenv(override=True)
     except Exception as e:
         print(f"⚠️ Failed to run read_static_values_modbustk.py: {e}")
+
+STATE_PATH = "./state.json"
+
+def write_state_atomic(state: dict) -> None:
+    """
+    Atomically write JSON state to STATE_PATH.
+    Readers will always see either the old or the new file, never a partial write.
+    """
+    dir_name = os.path.dirname(STATE_PATH)
+
+    # Ensure directory exists
+    os.makedirs(dir_name, exist_ok=True)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        dir=dir_name,
+        delete=False
+    ) as tmp:
+        json.dump(state, tmp)
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        temp_name = tmp.name
+
+    # Atomic replace on POSIX
+    os.replace(temp_name, STATE_PATH)
 
 def _ensure_pump_id() -> Optional[str]:
     _refresh_static_values()
@@ -336,7 +367,7 @@ command_map = {
 # Map string payloads from HA selects to numeric register values
 select_map = {
     "dvi/command/cvstate": {"Off": 0, "On": 1},
-    "dvi/command/vvstate": {"Off": 0, "On": 1},   # adjust if you add "Timer"
+    "dvi/command/vvstate": {"Off": 0, "On": 1, "Timer": 2},
     "dvi/command/cvnight": {"Timer": 0, "Constant day": 1, "Constant night": 2},
     "dvi/command/vvschedule": {"Timer": 0, "Constant on": 1, "Constant off": 2},
     "dvi/command/tvstate": {"Off": 0, "Automatic": 1, "Backup operation": 2},
@@ -381,6 +412,126 @@ def on_message(client, userdata, msg):
 
     except Exception as e:
         print(f"❌ Command handling failed for {msg.topic}: {e}")
+
+# --- File-based command processing (standalone mode) ---
+
+COMMANDS_FILE = os.path.join(SCRIPT_DIR, "commands.json")
+
+def load_history():
+    """Load existing history or return empty dict"""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r") as f:
+                return json.load(f)
+        except:
+            pass
+    return {}
+
+def prune_old_data(history, cutoff_time):
+    """Remove data points older than 24 hours"""
+    for sensor in history:
+        history[sensor] = [
+            point for point in history[sensor]
+            if point["timestamp"] > cutoff_time
+        ]
+    return history
+
+def save_history_sample(sensors_dict):
+    """Append current sensor readings to history file (all temperature sensors)"""
+    history = load_history()
+    current_time = time.time()
+    cutoff_time = current_time - HISTORY_MAX_AGE
+    
+    # Add new samples (only VV temp for now)
+    for sensor_name, value in sensors_dict.items():
+        if sensor_name not in history:
+            history[sensor_name] = []
+        history[sensor_name].append({
+            "timestamp": current_time,
+            "value": value
+        })
+    
+    # Prune old data
+    history = prune_old_data(history, cutoff_time)
+    
+    # Atomic write
+    history_dir = os.path.dirname(os.path.abspath(HISTORY_FILE))
+    with tempfile.NamedTemporaryFile(mode="w", dir=history_dir, delete=False) as tmp:
+        json.dump(history, tmp)
+        tmp_path = tmp.name
+    os.replace(tmp_path, HISTORY_FILE)
+
+def process_file_commands():
+    """Read commands.json, execute all select and number commands, remove processed"""
+    if not os.path.exists(COMMANDS_FILE):
+        return
+    
+    try:
+        with open(COMMANDS_FILE, "r") as f:
+            commands = json.load(f)
+        
+        if not isinstance(commands, list):
+            return
+        
+        remaining_commands = []
+        
+        for cmd in commands:
+            entity_id = cmd.get("entity_id")
+            domain = cmd.get("domain")
+            service = cmd.get("service")
+            value = cmd.get("value")
+            command_topic = cmd.get("command_topic")
+            
+            if not entity_id or not domain or not service or value is None:
+                print(f"⏭️ Skipping incomplete command: {cmd}")
+                continue  # Remove from queue
+            
+            # Map command_topic to register configuration
+            cmd_cfg = command_map.get(command_topic)
+            if not cmd_cfg:
+                print(f"⚠️ Unknown command_topic: {command_topic}")
+                continue  # Remove from queue
+            
+            try:
+                # Handle dynamic curve registers
+                if "dynamic_curve" in cmd_cfg:
+                    reg_info = resolve_curve_register(cmd_cfg["dynamic_curve"])
+                    if reg_info is None:
+                        print(f"❌ Could not resolve register for {command_topic}")
+                        remaining_commands.append(cmd)
+                        continue
+                    
+                    register = reg_info["write"]
+                    print(f"📝 File command: {entity_id} = {value} (dynamic curve reg=0x{register:02X})")
+                    write_fc06(register, value)
+                    print(f"✅ Command executed: {entity_id} reg=0x{register:02X} value={value}")
+                
+                # Handle standard registers
+                else:
+                    register = cmd_cfg["register"]
+                    scaled = value * cmd_cfg.get("scale", 1)
+                    
+                    print(f"📝 File command: {entity_id} = {value} (reg=0x{register:02X})")
+                    write_fc06(register, scaled)
+                    print(f"✅ Command executed: {entity_id} reg=0x{register:02X} value={scaled}")
+                
+                # Successfully executed - don't keep in queue
+                
+            except Exception as e:
+                print(f"❌ Failed to write {entity_id}: {e}")
+                # Keep failed command in queue for retry
+                remaining_commands.append(cmd)
+        
+        # Atomically update commands.json with only remaining (failed) commands
+        commands_dir = os.path.dirname(os.path.abspath(COMMANDS_FILE))
+        with tempfile.NamedTemporaryFile(mode="w", dir=commands_dir, delete=False) as tmp:
+            json.dump(remaining_commands, tmp, indent=2)
+            tmp_path = tmp.name
+        
+        os.replace(tmp_path, COMMANDS_FILE)
+            
+    except Exception as e:
+        print(f"❌ Error processing file commands: {e}")
 
 # --- FC06 registers discovery ---
 
@@ -506,7 +657,7 @@ def publish_all_discovery() -> None:
                 mapping = {
                     "cv_mode": {0: "Off", 1: "On"},
                     "cv_night": {0: "Timer", 1: "Constant day", 2: "Constant night"},
-                    "vv_mode": {0: "Off", 1: "On"},
+                    "vv_mode": {0: "Off", 1: "On", 2: "Timer"},
                     "vv_schedule": {0: "Timer", 1: "Constant on", 2: "Constant off"},
                     "aux_heating": {0: "Off", 1: "Automatic", 2: "On"},
                     "central_heating_config": {
@@ -811,11 +962,28 @@ def _push_network_config_to_modbus() -> None:
 last_coil_update = 0
 last_fc04_update = 0
 last_misc_update = 0
+last_history_sample = 0
 
 last_coils = {}
 last_inputs = {}
 last_writes = {}
 last_published = None
+
+# Curve configuration maps (for command processing)
+CURVE_MAPS = {
+    0: {
+        "write": {12: 0x12F, -12: 0x130},
+        "read": {12: 0x2F, -12: 0x30},
+    },
+    1: {
+        "write": {12: 0x131, -12: 0x132},
+        "read": {12: 0x31, -12: 0x32},
+    },
+    2: {
+        "write": {12: 0x133, -12: 0x134},
+        "read": {12: 0x33, -12: 0x34},
+    },
+}
 
 # Start MQTT and push net config once at startup
 mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
@@ -826,6 +994,9 @@ _push_network_config_to_modbus()
 
 while True:
     now = time.time()
+
+    # Process file-based commands (standalone mode)
+    process_file_commands()
 
     # Coils every 13s
     if now - last_coil_update >= 13:
@@ -933,6 +1104,28 @@ while True:
 
         last_misc_update = now
 
+    # Sample sensor history every 60 seconds (all temperature sensors)
+    if now - last_history_sample >= HISTORY_SAMPLE_INTERVAL:
+        history_sensors = {
+            "Storage tank VV": last_inputs.get("Storage tank VV"),
+            "Storage tank CV": last_inputs.get("Storage tank CV"),
+            "CV Forward": last_inputs.get("CV Forward"),
+            "CV Return": last_inputs.get("CV Return"),
+            "Outdoor": last_inputs.get("Outdoor"),
+            "Evaporator": last_inputs.get("Evaporator"),
+            "Compressor HP": last_inputs.get("Compressor HP"),
+            "Compressor LP": last_inputs.get("Compressor LP"),
+            "Defrost": 1 if last_coils.get("4-way valve defrost") else 0
+        }
+        # Filter out None values (but keep 0 for defrost)
+        history_sensors = {k: v for k, v in history_sensors.items() if v is not None}
+        
+        if history_sensors:
+            save_history_sample(history_sensors)
+            sensor_list = ", ".join([f"{k}={v}°C" if k != "Defrost" else f"{k}={'ON' if v else 'OFF'}" for k, v in history_sensors.items()])
+            print(f"📊 History sample: {sensor_list}")
+        last_history_sample = now
+
     # Final payload from cached values
     full_payload = {
         "coils": last_coils,
@@ -962,6 +1155,7 @@ while True:
     # Only publish if payload changed
     if full_payload != last_published:
         mqtt_client.publish("dvi/measurement", json.dumps(full_payload))
+        write_state_atomic(full_payload)
         last_published = full_payload
 
     time.sleep(1)

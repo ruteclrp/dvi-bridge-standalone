@@ -414,7 +414,6 @@ def on_message(client, userdata, msg):
         print(f"❌ Command handling failed for {msg.topic}: {e}")
 
 # --- File-based command processing (standalone mode) ---
-# TESTING: Only aux_heating select for now
 
 COMMANDS_FILE = os.path.join(SCRIPT_DIR, "commands.json")
 

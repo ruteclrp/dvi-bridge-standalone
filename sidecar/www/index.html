@@ -4,37 +4,87 @@
   <meta charset="utf-8">
   <link rel="stylesheet" href="/css/materialdesignicons.min.css">
   <title>DVI Heatpump</title>
-
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <!-- Define ha-icon FIRST -->
   <script type="module">
+    const supportsAdoptedStyleSheets = "adoptedStyleSheets" in Document.prototype;
+    const haIconBaseSheet = supportsAdoptedStyleSheets ? new CSSStyleSheet() : null;
+    if (haIconBaseSheet) {
+      haIconBaseSheet.replaceSync(`
+        :host {
+          display: inline-block;
+          width: 24px;
+          height: 24px;
+        }
+        i {
+          font-size: 24px;
+          line-height: 1;
+          color: inherit;
+        }
+      `);
+    }
+
+    let mdiSheetPromise;
+    function loadMdiSheetOnce() {
+      if (!supportsAdoptedStyleSheets) return Promise.resolve(null);
+      if (!mdiSheetPromise) {
+        mdiSheetPromise = (async () => {
+          if (window.__mdiSharedSheet) return window.__mdiSharedSheet;
+          const response = await fetch("/css/materialdesignicons.min.css");
+          const cssText = (await response.text()).replace(/\/\*# sourceMappingURL=[^*]+?\*\//g, "");
+          const sheet = new CSSStyleSheet();
+          sheet.replaceSync(cssText);
+          window.__mdiSharedSheet = sheet;
+          return sheet;
+        })();
+      }
+      return mdiSheetPromise;
+    }
+
     class HaIcon extends HTMLElement {
+      static get observedAttributes() { return ["icon"]; }
+
       constructor() {
         super();
-        this.attachShadow({ mode: "open" });
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = "/css/materialdesignicons.min.css";
-        const style = document.createElement("style");
-        style.textContent = `
-          :host { 
-            display: inline-block; 
-            width: 24px; 
-            height: 24px;
-          }
-          i { 
-            font-size: 24px; 
-            line-height: 1;
-            color: inherit;
-          }
-        `;
-        this.shadowRoot.append(link, style);
+        this._usesShadow = supportsAdoptedStyleSheets;
+        this._root = this._usesShadow ? this.attachShadow({ mode: "open" }) : this;
+        this._iconEl = document.createElement("i");
+        this._root.appendChild(this._iconEl);
+
+        if (this._usesShadow && haIconBaseSheet) {
+          this._root.adoptedStyleSheets = [haIconBaseSheet];
+          loadMdiSheetOnce()
+            .then(sheet => {
+              if (sheet && !this._root.adoptedStyleSheets.includes(sheet)) {
+                this._root.adoptedStyleSheets = [haIconBaseSheet, sheet];
+              }
+            })
+            .catch(err => console.error("HaIcon CSS load failed", err));
+        } else if (!this._usesShadow) {
+          Object.assign(this.style, {
+            display: "inline-block",
+            width: "24px",
+            height: "24px"
+          });
+          Object.assign(this._iconEl.style, {
+            fontSize: "24px",
+            lineHeight: "1",
+            color: "inherit"
+          });
+        }
       }
 
       connectedCallback() {
-        let icon = (this.getAttribute("icon") || "").replace("mdi:", "mdi-");
-        const i = document.createElement("i");
-        i.className = `mdi ${icon}`;
-        this.shadowRoot.appendChild(i);
+        this._render();
+      }
+
+      attributeChangedCallback() {
+        this._render();
+      }
+
+      _render() {
+        const icon = (this.getAttribute("icon") || "").replace("mdi:", "mdi-");
+        this._iconEl.className = icon ? `mdi ${icon}` : "mdi";
       }
     }
     customElements.define("ha-icon", HaIcon);

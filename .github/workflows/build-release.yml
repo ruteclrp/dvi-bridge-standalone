@@ -1,36 +1,25 @@
-# name: Build and release DVI LV Heatpump Card
+name: Build and release DVI LV Heatpump Card
 
-# on:
-#   push:
-#     tags:
-#       - "v*"
+on:
+  push:
+    tags:
+      - "v*"
 
-# jobs:
-#   build-release:
-#     runs-on: ubuntu-latest
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
 
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
+    permissions:
+      contents: write
 
-#       # Build the dist folder for HACS
-#       - name: Prepare dist folder
-#         run: |
-#           rm -rf dist
-#           mkdir -p dist/dvi-lv
-#           cp dvi-lv-heatpump-card.js dist/
-#           cp -r dvi-lv/* dist/dvi-lv/
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # # Optional: create a ZIP with the dist contents for manual installs
-      # - name: Create ZIP from dist
-      #   run: |
-      #     cd dist
-      #     zip -r ../dvi-lv-heatpump-card.js.zip .
-
-      # - name: Create GitHub Release
-      #   uses: softprops/action-gh-release@v2
-      #   with:
-      #     files: |
-      #       dvi-lv-heatpump-card.js.zip
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Build the dist folder for HACS
+      - name: Prepare dist folder
+        run: |
+          rm -rf dist
+          mkdir -p dist/dvi-lv
+          cp sidecar/www/dvi-card/dvi-lv-heatpump-card.js dist/
+          cp -r sidecar/www/dvi-card/dvi-lv/* dist/dvi-lv/    

@@ -333,7 +333,7 @@ class HistoryCard extends HTMLElement {
     const values = data.map(point => point.value);
     
     this._chart = new Chart(ctx, {
-      type: 'line',
+      type: 'line', 
       data: {
         labels: labels,
         datasets: [{

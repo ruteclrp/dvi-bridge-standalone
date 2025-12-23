@@ -71,6 +71,7 @@ Leave `MQTT_USER` / `MQTT_PASS` empty if your broker does not require authentica
 ### 5. Test the bridge manually
 
 ```bash
+cd dvi-bridge-standalone
 source .venv/bin/activate
 python bridge.py
 ```

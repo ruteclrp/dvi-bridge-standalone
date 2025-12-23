@@ -43,7 +43,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 4. Configure MQTT environment
+### 4. Configure MQTT environment if you run against a Home Assistant device
 
 Copy the example environment file and edit it with your broker settings:
 
@@ -89,10 +89,27 @@ dvi/measurement
 ```
 
 Home Assistant will also receive MQTT discovery messages so entities are created automatically.
+### 6. Running the bridge as standalone with sidecar
+
+Ensure the card files are also located in teh sidecar folders
+```bash
+cp -r /home/dviha/dvi-bridge-standalone/dist/* /home/dviha/dvi-bridge-standalone/sidecar/www/dvi-card/
+```
+
+Test the sidecar
+```bash
+cd dvi-bridge-standalone
+source .venv/bin/activate
+python webbridge.py
+```
+
 
 ### 7. Install the systemd service (auto‑start on boot)
 
 Copy the example service files and edit them:
+If you fun against HA you should only setup the systemd for running bridge.py
+
+If you run locally with sidecar and web access you should setup a systemd for both bridge.py and webbridge.py
 
 ```bash
 # Copy and customize the files

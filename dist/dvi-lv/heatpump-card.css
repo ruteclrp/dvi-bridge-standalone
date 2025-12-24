@@ -1,0 +1,289 @@
+/* ============ Card Shell ============ */
+:host {
+	display: block;
+}
+
+ha-card {
+	padding: 16px;
+}
+
+.header {
+	margin-bottom: 8px;
+	font-size: 1.2em;
+	font-weight: 600;
+}
+
+/* ============ Diagram Canvas ============ */
+.diagram {
+	position: relative;
+	width: 100%;
+	max-width: 600px;
+	margin: 0 auto 16px;
+}
+
+.diagram-base {
+	width: 100%;
+	display: block;
+}
+
+/* ============ Interaction Helpers ============ */
+.clickable {
+	cursor: pointer;
+}
+
+/* ============ Diagram Labels ============ */
+.diagram-label,
+.diagram-element,
+.diagram-icon {
+	position: absolute;
+	transform: translate(-50%, -50%);
+}
+
+.diagram-label {
+	font-size: 0.9em;
+	color: rgb(8, 0, 0);
+	font-weight: normal;
+	white-space: nowrap;
+	text-shadow: 0 0 3px rgba(255, 255, 255, 0.7);
+	z-index: 5;
+}
+
+.diagram-label.heat-curve-trigger {
+	top: 18%;
+	left: 50%;	
+}
+
+.diagram-label.label-outdoor {
+	top: 11%;
+	left: 13%;
+}
+
+.diagram-label.label-curve {
+	top: 18%;
+	left: 68%;
+}
+
+.diagram-label.label-evaporator {
+	top: 77%;
+	left: 16%;
+}
+
+.diagram-label.label-hp {
+	top: 31%;
+	left: 43.5%;
+}
+
+.diagram-label.label-lp {
+	top: 31%;
+	left: 34%;
+}
+
+.diagram-label.label-tank-cv {
+	top: 72.5%;
+	left: 61%;
+}
+
+.diagram-label.label-tank-vv {
+	top: 33%;
+	left: 80%;
+}
+
+.diagram-label.label-cv-forward {
+	top: 79.2%;
+	left: 73%;
+}
+
+.diagram-label.label-cv-return {
+	top: 94%;
+	left: 73%;
+}
+
+/* ============ Diagram Icons ============ */
+.diagram-icon img {
+	width: 100%;
+	height: auto;
+}
+
+.diagram-icon.icon-cv-pump {
+	top: 78.40%;
+	left: 89.0%;
+	width: 20.5%;
+}
+
+.diagram-icon.icon-cv-flow {
+	top: 89.37%;
+	left: 71.72%;
+	width: 14.2%;
+}
+
+.diagram-icon.icon-hp-loop {
+	top: 63.2%;
+	left: 18.4%;
+	width: 33.9%;
+}
+
+.diagram-icon.icon-comp-unit {
+	top: 63.3%;
+	left: 46%;
+	width: 21.3%;
+}
+
+.diagram-element.icon-defrost {
+	top: 85%;
+	left: 15%;
+}
+
+.diagram-element.icon-aux {
+	top: 70%;
+	left: 69%;
+}
+
+/* ============ Mode Chips ============ */
+.mode-bar {
+	position: absolute;
+	top: 4%;
+	right: 3%;
+	display: flex;
+	flex-direction: row;
+	gap: 6px;
+}
+
+.mode-bar.mode-bar--bottom {
+	top: auto;
+	bottom: 4%;
+	left: 50%;
+	right: auto;
+	transform: translateX(-50%);
+	justify-content: center;
+	z-index: 5;
+	padding: 0 8px;
+}
+
+.mode-chip {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: 999px;
+	background: var(--chip-bg, rgba(255, 255, 255, 0.95));
+	border: 1px solid rgba(0, 0, 0, 0.12);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--chip-text-color, var(--primary-text-color));
+	transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.mode-chip--active {
+	border-color: var(--chip-accent, var(--accent-color));
+	background: var(--chip-active-bg, rgba(255, 255, 255, 0.85));
+	color: var(--chip-active-text, var(--primary-text-color));
+}
+
+.mode-chip--inactive {
+	opacity: 0.65;
+	color: var(--disabled-text-color);
+}
+
+.mode-chip--info {
+	background: var(--chip-info-background, rgba(56, 126, 245, 0.18));
+	border-color: var(--chip-info-border, rgba(56, 126, 245, 0.5));
+	color: var(--chip-info-text, #0d47a1);
+}
+
+.mode-chip ha-icon {
+	--mdc-icon-size: 18px;
+	color: inherit;
+}
+
+.mode-chip--info ha-icon {
+	color: inherit;
+}
+
+.small-mode-icon {
+	--mdc-icon-size: 14px;
+	opacity: 0.9;
+}
+
+.chip-label {
+	font-size: 0.75em;
+	color: inherit;
+}
+
+.chip-value {
+	font-size: 0.75em;
+	font-weight: 600;
+	color: inherit;
+}
+
+/* ============ Heat-Curve Card Shell ============ */
+.heat-curve-card {
+	width: 100%;
+}
+
+.heat-curve-card__chart {
+	width: 100%;
+	height: 320px;
+	padding: 8px 8px 0 8px;
+}
+
+.heat-curve-card__chart canvas {
+	width: 100%;
+	height: 100%;
+	display: block;
+}
+
+/* ============ Controls Section ============ */
+.heat-curve-card__controls {
+	display: flex;
+	width: 100%;
+	padding: 10px;
+	gap: 10px;
+	box-sizing: border-box;
+}
+
+.heat-curve-card__controls hui-entities-card {
+	flex: 1;
+	width: 100%;
+}
+
+/* ============ Editor Container ============ */
+.card-config {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.advanced-config {
+	margin-top: 16px;
+}
+
+.advanced-config__summary {
+	cursor: pointer;
+}
+
+.advanced-config__body {
+	margin-top: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.advanced-config__btn {
+	margin-top: 8px;
+	align-self: flex-start;
+	padding: 6px 12px;
+	cursor: pointer;
+}
+
+/* ============ Mobile View ============ */
+
+@media (max-width: 500px) {
+	.chip-label {
+		display: none;
+	}
+
+	.diagram-unit {
+		display: none;
+	}
+}

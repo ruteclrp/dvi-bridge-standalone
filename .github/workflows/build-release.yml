@@ -1,25 +1,44 @@
-name: Build and release DVI LV Heatpump Card
+name: Build dist
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [ "main" ]
+    paths:
+      - "sidecar/**"
+      - ".github/workflows/build-dist.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build-release:
+  build-dist:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      # Build the dist folder for HACS
       - name: Prepare dist folder
         run: |
           rm -rf dist
           mkdir -p dist/dvi-lv
           cp sidecar/www/dvi-card/dvi-lv-heatpump-card.js dist/
-          cp -r sidecar/www/dvi-card/dvi-lv/* dist/dvi-lv/    
+          cp -r sidecar/www/dvi-card/dvi-lv/* dist/dvi-lv/
+          echo "== dist =="
+          find dist -maxdepth 3 -type f -print
+
+      - name: Commit dist back to repo
+        run: |
+          # Hvis dist ikke har ændret sig, så stop pænt
+          git add dist
+          git diff --cached --quiet && echo "No dist changes" && exit 0
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Brug [skip ci] for at undgå at andre workflows trigges unødigt
+          git commit -m "chore: build dist [skip ci]"
+          git push

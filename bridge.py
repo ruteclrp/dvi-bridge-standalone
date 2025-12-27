@@ -579,7 +579,7 @@ mode_options = {
     "cv_night": ["Timer", "Constant day", "Constant night"],
     "vv_mode": ["Off", "On", "Timer"],
     "vv_schedule": ["Timer", "Constant on", "Constant off"],
-    "aux_heating": ["Off", "Automatic", "On"],
+    "aux_heating": ["Off", "Automatic", "Backup operation"],
     "central_heating_config": ["Under floor heating w/o shunt",
                                "Under floor heating w. shunt",
                                "Radiator and mixed systems"]
@@ -659,7 +659,7 @@ def publish_all_discovery() -> None:
                     "cv_night": {0: "Timer", 1: "Constant day", 2: "Constant night"},
                     "vv_mode": {0: "Off", 1: "On", 2: "Timer"},
                     "vv_schedule": {0: "Timer", 1: "Constant on", 2: "Constant off"},
-                    "aux_heating": {0: "Off", 1: "Automatic", 2: "On"},
+                    "aux_heating": {0: "Off", 1: "Automatic", 2: "Backup operation"},
                     "central_heating_config": {
                         0: "Under floor heating w/o shunt",
                         1: "Under floor heating w. shunt",

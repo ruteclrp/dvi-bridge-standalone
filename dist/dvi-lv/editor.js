@@ -164,7 +164,7 @@ export class LvHeatpumpCardEditor extends HTMLElement {
 			curve_set_plus12_number: find("number", "curve_set_12_2"),
 			cv_min_number: find("number", "cv_min"),
 			cv_max_number: find("number", "cv_max"),
-		pump_type: find("sensor", "pump_type"),
+			pump_type: find("sensor", "pump_type"),
 			outdoor_temp: find("sensor", "outdoor"),
 			curve_temp: find("sensor", "curve_temp"),
 			storage_tank_cv: find("sensor", "storage_tank_cv"),

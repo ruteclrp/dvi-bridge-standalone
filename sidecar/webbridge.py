@@ -101,15 +101,15 @@ print(f"✅ Reading state from {STATE_PATH}")
 app = Flask(__name__, static_folder=WWW_DIR, static_url_path="")
 
 # Disable caching for development
-#app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-#@app.after_request
-#def add_no_cache_headers(response):
-#    """Add no-cache headers to prevent browser caching during development"""
-#    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-#    response.headers['Pragma'] = 'no-cache'
-#    response.headers['Expires'] = '0'
-#    return response
+@app.after_request
+def add_no_cache_headers(response):
+    """Add no-cache headers to prevent browser caching during development"""
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @app.route("/")
 def index():

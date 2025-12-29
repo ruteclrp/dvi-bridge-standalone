@@ -279,6 +279,14 @@ function setupPopupHandler(hass) {
 
         modalBody.innerHTML = "";
         modalBody.appendChild(heatCurveCard);
+        
+        // Force the modal-content to not have a fixed max-width
+        const modalContent = document.querySelector('.modal-content');
+        if (modalContent) {
+          modalContent.style.setProperty('max-width', '90vw', 'important');
+          modalContent.style.setProperty('width', 'fit-content', 'important');
+          console.log('Modal content styles set:', modalContent.style.maxWidth, modalContent.style.width);
+        }
       })();
 
       modal.classList.add("active");

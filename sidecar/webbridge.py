@@ -113,11 +113,31 @@ def index():
 @app.route("/api/states")
 def api_states():
     with state_lock:
-        return jsonify(states)
+        states_copy = states.copy()
+        
+        # TESTING OVERRIDE: Force geothermal pump on for BW testing
+        # Uncomment the following lines to test BW mode with brine circulation active
+        # if "binary_sensor.circ_pump_geothermal" in states_copy:
+        #     states_copy["binary_sensor.circ_pump_geothermal"]["state"] = "on"
+        
+        # TESTING OVERRIDE: Add fake BW temperature sensors for testing
+        # Uncomment the following lines to test BW cold side temperatures
+        # states_copy["sensor.cold_side_warm_temp"] = {
+        #     "state": "8.5",
+        #     "attributes": {"unit_of_measurement": "°C", "friendly_name": "Cold side warm"}
+        # }
+        # states_copy["sensor.cold_side_cold_temp"] = {
+        #     "state": "2.3",
+        #     "attributes": {"unit_of_measurement": "°C", "friendly_name": "Cold side cold"}
+        # }
+        
+        return jsonify(states_copy)
 
 @app.route("/api/pump_type")
 def api_pump_type():
     """Return the detected pump type (AW or BW)"""
+    # TESTING OVERRIDE: Uncomment the next line to force BW mode in frontend
+    # return jsonify({"pump_type": "BW"})
     return jsonify({"pump_type": pump_type})
 
 @app.route("/api/history/<sensor_name>")

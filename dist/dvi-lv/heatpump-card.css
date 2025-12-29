@@ -70,13 +70,13 @@ ha-card {
 }
 
 .diagram-label.label-cold-side-warm {
-	top: 33%;  /* Placeholder - adjust position manually */
-	left: 15%;
+	top: 42%;  
+	left: 12%;
 }
 
 .diagram-label.label-cold-side-cold {
-	top: 50%;  /* Placeholder - adjust position manually */
-	left: 20%;
+	top: 56%;  
+	left: 17%;
 }
 
 .diagram-label.label-hp {
@@ -133,10 +133,24 @@ ha-card {
 	width: 33.9%;
 }
 
+/* BW-specific positioning for brine loop */
+.diagram-icon.icon-hp-loop[data-pump-type="bw"] {
+	top: 63.2%;  /* Adjust as needed */
+	left: 18.4%;  /* Adjust as needed */
+	width: 33.9%;  /* Adjust as needed */
+}
+
 .diagram-icon.icon-comp-unit {
 	top: 63.3%;
 	left: 46%;
 	width: 21.3%;
+}
+
+/* BW-specific positioning for compressor */
+.diagram-icon.icon-comp-unit[data-pump-type="bw"] {
+	top: 63.3%;  /* Adjust as needed */
+	left: 46%;  /* Adjust as needed */
+	width: 21.3%;  /* Adjust as needed */
 }
 
 .diagram-element.icon-defrost {

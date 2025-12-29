@@ -8,6 +8,24 @@ class LvHeatpumpCard extends HTMLElement {
 	constructor() {
 		super();
 		this._heatCurveConfigKey = "";
+		this._pumpType = "AW"; // Default to AW
+		this._fetchPumpType();
+	}
+
+	async _fetchPumpType() {
+		try {
+			const response = await fetch("/api/pump_type");
+			const data = await response.json();
+			if (data && data.pump_type) {
+				this._pumpType = data.pump_type;
+				// Trigger re-render if hass is already set
+				if (this._hass && this._config && this._root) {
+					this._renderDiagram();
+				}
+			}
+		} catch (e) {
+			console.warn("Could not fetch pump type, using default AW:", e);
+		}
 	}
 
 	static get imageBase() {
@@ -32,21 +50,26 @@ class LvHeatpumpCard extends HTMLElement {
 
 	set hass(hass) {
 		this._hass = hass;
-		if (!this._config || !this._root) return;
+		this._renderDiagram();
+	}
+
+	_renderDiagram() {
+		if (!this._config || !this._root || !this._hass) return;
 
 		const diagram = this._root.getElementById("diagram");
 		if (!diagram) return;
 
 		const view = buildDiagramView({
-			hass,
+			hass: this._hass,
 			config: this._config,
 			imageBase: LvHeatpumpCard.imageBase,
+			pumpType: this._pumpType,
 		});
 
 		diagram.innerHTML = view.html;
 		bindHistoryHooks(diagram, view.stateEntityMap, this);
 		bindIconHooks(diagram, view.iconEntityMap, this);
-		wireModeChips(diagram, hass, view.chipGroups);
+		wireModeChips(diagram, this._hass, view.chipGroups);
 		this._bindHeatCurveTrigger(diagram);
 	}
 

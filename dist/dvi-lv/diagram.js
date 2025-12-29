@@ -19,7 +19,15 @@ const CHIP_TITLES = {
 
 const opacityFor = (state) => (state === "on" ? 1 : 0.25);
 
-export function buildDiagramView({ hass, config, imageBase }) {
+export function buildDiagramView({ hass, config, imageBase, pumpType }) {
+	// Determine pump type (default to AW if not provided)
+	const isPumpTypeBW = pumpType === "BW";
+	
+	// Select correct images based on pump type
+	const baseDiagram = isPumpTypeBW ? "bw.gif" : "aw.gif";
+	const compressorImage = isPumpTypeBW ? "COMP_bw_on.gif" : "COMP_on.gif";
+	const evapLoopImage = isPumpTypeBW ? "brine_on.gif" : "HP_on.gif";
+	
 	const getState = (entityId) =>
 		entityId && hass.states[entityId] ? hass.states[entityId].state : null;
 
@@ -58,6 +66,8 @@ export function buildDiagramView({ hass, config, imageBase }) {
 		tankCv: config.storage_tank_cv,
 		tankVv: config.storage_tank_vv,
 		evap: config.evaporator_temp,
+		coldSideWarm: config.cold_side_warm_temp,
+		coldSideCold: config.cold_side_cold_temp,
 		hp: config.hp_temp,
 		lp: config.lp_temp,
 		cvForward: config.cv_forward_temp,
@@ -152,6 +162,8 @@ export function buildDiagramView({ hass, config, imageBase }) {
 	const power = config.em23_power ? getState(config.em23_power) : null;
 
 	const evapTemp = config.evaporator_temp ? getState(config.evaporator_temp) : null;
+	const coldSideWarmTemp = config.cold_side_warm_temp ? getState(config.cold_side_warm_temp) : null;
+	const coldSideColdTemp = config.cold_side_cold_temp ? getState(config.cold_side_cold_temp) : null;
 	const hpTemp = config.hp_temp ? getState(config.hp_temp) : null;
 	const lpTemp = config.lp_temp ? getState(config.lp_temp) : null;
 	const cvForwardTemp = config.cv_forward_temp ? getState(config.cv_forward_temp) : null;
@@ -212,7 +224,7 @@ export function buildDiagramView({ hass, config, imageBase }) {
 	const auxChipClasses = `mode-chip popup-chip ${chipStateClass(auxActive)}`;
 
 	const html = `
-    <img src="${imageBase}/dvi.gif" class="diagram-base" alt="LV diagram" />
+    <img src="${imageBase}/${baseDiagram}" class="diagram-base" alt="${pumpType || 'AW'} diagram" />
 
     ${
 			outdoor !== null
@@ -226,10 +238,28 @@ export function buildDiagramView({ hass, config, imageBase }) {
     ${"" /* heat-curve label moved into bottom chip */}
 
     ${
-			evapTemp !== null && compState === "on"
+			!isPumpTypeBW && evapTemp !== null && compState === "on"
 				? `<div class="diagram-label label-evaporator" data-key="evap">${valueWithUnit(
 						"evap",
 						evapTemp,
+				  )}</div>`
+				: ""
+		}
+
+    ${
+			isPumpTypeBW && coldSideWarmTemp !== null && compState === "on"
+				? `<div class="diagram-label label-cold-side-warm" data-key="coldSideWarm">${valueWithUnit(
+						"coldSideWarm",
+						coldSideWarmTemp,
+				  )}</div>`
+				: ""
+		}
+
+    ${
+			isPumpTypeBW && coldSideColdTemp !== null && compState === "on"
+				? `<div class="diagram-label label-cold-side-cold" data-key="coldSideCold">${valueWithUnit(
+						"coldSideCold",
+						coldSideColdTemp,
 				  )}</div>`
 				: ""
 		}
@@ -289,14 +319,14 @@ export function buildDiagramView({ hass, config, imageBase }) {
     </div>
 
     <div class="diagram-icon icon-hp-loop" data-icon-key="comp" style="opacity:${compState === "on" ? 1 : 0};">
-      <img src="${imageBase}HP_on.gif" alt="HP on" />
+      <img src="${imageBase}/${evapLoopImage}" alt="${isPumpTypeBW ? 'Brine' : 'HP'} on" />
     </div>
     <div class="diagram-icon icon-comp-unit" data-icon-key="comp" style="opacity:${compState === "on" ? 1 : 0};">
-      <img src="${imageBase}COMP_on.gif" alt="Compressor on" />
+      <img src="${imageBase}/${compressorImage}" alt="Compressor on" />
     </div>
 
     ${
-			defrostState !== null
+			!isPumpTypeBW && defrostState !== null
 				? `<ha-icon
              class="diagram-element icon-defrost"
              data-icon-key="defrost"

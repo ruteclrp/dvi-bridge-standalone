@@ -720,6 +720,32 @@ def publish_all_discovery() -> None:
         entity_category="diagnostic"
     )
 
+    # Pump type, ID, and firmware versions
+    publish_discovery_sensor(
+        name="Pump Type",
+        unique_id="dvi_static_pump_type",
+        value_template="{{ value_json.pump_type }}",
+        entity_category="diagnostic"
+    )
+    publish_discovery_sensor(
+        name="Pump ID",
+        unique_id="dvi_static_pumpid",
+        value_template="{{ value_json.pumpid }}",
+        entity_category="diagnostic"
+    )
+    publish_discovery_sensor(
+        name="Firmware Version Bottom",
+        unique_id="dvi_static_sw_bot",
+        value_template="{{ value_json.sw_bot }}",
+        entity_category="diagnostic"
+    )
+    publish_discovery_sensor(
+        name="Firmware Version Top",
+        unique_id="dvi_static_sw_top",
+        value_template="{{ value_json.sw_top }}",
+        entity_category="diagnostic"
+    )
+
     # FC06 discovery
     for reg, label in fc06_registers.items():
         try:

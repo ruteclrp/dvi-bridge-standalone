@@ -18,6 +18,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     evaporator_temp: "sensor.evaporator_temp",
     cold_side_warm_temp: "sensor.cold_side_warm_temp",
     cold_side_cold_temp: "sensor.cold_side_cold_temp",
+    pump_type: "sensor.pump_type",
     hp_temp: "sensor.compressor_hp",
     lp_temp: "sensor.compressor_lp",
     em23_power: "sensor.em23_power",

@@ -60,6 +60,11 @@ def load_state_loop():
                     for entity_id, cfg in ENTITY_MAP.items():
                         source_group, source_key = cfg["source"]
 
+                        # Special handling for pump_type sensor
+                        if source_group == "pump_type":
+                            states[entity_id]["state"] = pump_type
+                            continue
+
                         group = payload.get(source_group)
                         if not isinstance(group, dict):
                             continue

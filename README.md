@@ -274,9 +274,12 @@ The auto-mapping includes:
 * CV night mode
 * VV schedule
 * AUX electric heater mode
-* All relevant temperature sensors
+* Pump type (AW or BW) for correct diagram display
+* All relevant temperature sensors (including BW cold side sensors)
 * Pump / compressor / defrost binary sensors
 * Entities for the popup panels (Info / CV / VV / AUX)
+
+**Note:** The `pump_type` entity (sensor.pump_type) is automatically detected and used to display the correct diagram (AW = Air-to-Water with evaporator, BW = Brine-to-Water/Geothermal with cold side sensors). Make sure this entity is included in your configuration.
 
 If you prefer full control, you can still override or manually edit any field in the Advanced entity mapping section.
 

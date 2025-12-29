@@ -407,6 +407,13 @@ ENTITY_MAP = {
       "state_class": "total_increasing",
       "friendly_name": "Tilskudsvarme Timer"
     }
+  },
+  "sensor.pump_type": {
+    "source": ("pump_type", "value"),
+    "domain": "sensor",
+    "attributes": {
+      "friendly_name": "Pump Type"
+    }
   }
 }
 

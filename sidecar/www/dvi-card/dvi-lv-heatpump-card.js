@@ -9,18 +9,29 @@ class LvHeatpumpCard extends HTMLElement {
 		super();
 		this._heatCurveConfigKey = "";
 		this._pumpType = "AW"; // Default to AW
-		this._fetchPumpType();
 	}
 
 	async _fetchPumpType() {
+		// Try to get pump type from Home Assistant entity first
+		if (this._hass && this._config && this._config.pump_type) {
+			const pumpTypeEntity = this._hass.states[this._config.pump_type];
+			if (pumpTypeEntity && pumpTypeEntity.state) {
+				this._pumpType = pumpTypeEntity.state;
+				this._updateHeader();
+				if (this._root) {
+					this._renderDiagram();
+				}
+				return;
+			}
+		}
+
+		// Fallback to /api/pump_type for standalone mode
 		try {
 			const response = await fetch("/api/pump_type");
 			const data = await response.json();
 			if (data && data.pump_type) {
 				this._pumpType = data.pump_type;
-				// Update header with new pump type
 				this._updateHeader();
-				// Trigger re-render if hass is already set
 				if (this._hass && this._config && this._root) {
 					this._renderDiagram();
 				}
@@ -58,10 +69,19 @@ class LvHeatpumpCard extends HTMLElement {
       </ha-card>
     `;
 		this._updateHeader();
+		this._fetchPumpType(); // Try to fetch pump type after config is set
 	}
 
 	set hass(hass) {
 		this._hass = hass;
+		// Check for pump type updates from HA entity
+		if (this._config && this._config.pump_type) {
+			const pumpTypeEntity = hass.states[this._config.pump_type];
+			if (pumpTypeEntity && pumpTypeEntity.state !== this._pumpType) {
+				this._pumpType = pumpTypeEntity.state;
+				this._updateHeader();
+			}
+		}
 		this._renderDiagram();
 	}
 

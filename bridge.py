@@ -351,7 +351,14 @@ def read_coils():
 
         # Filter coils based on pump type
         active_coils = filter_coils_by_type(PUMP_TYPE)
-        return dict(sorted({active_coils[i]: bits[i] for i in active_coils}.items()))
+        result = dict(sorted({active_coils[i]: bits[i] for i in active_coils}.items()))
+        
+        # TESTING OVERRIDE: Force geothermal pump on for BW testing
+        # Uncomment the next line to test BW mode with brine circulation active
+        # if "Circ. pump geothermal" in result:
+        #     result["Circ. pump geothermal"] = 1
+        
+        return result
     except Exception as e:
         print(f"FC01 read failed: {e}")
         return {}
@@ -724,8 +731,7 @@ def publish_all_discovery() -> None:
     publish_discovery_sensor(
         name="Pump Type",
         unique_id="dvi_static_pump_type",
-        value_template="{{ value_json.pump_type }}",
-        entity_category="diagnostic"
+        value_template="{{ value_json.pump_type }}"
     )
     publish_discovery_sensor(
         name="Pump ID",
@@ -1067,6 +1073,8 @@ CURVE_MAPS = {
 
 # Detect pump type before starting main loop
 PUMP_TYPE = detect_pump_type()
+# TESTING OVERRIDE: Uncomment the next line to force BW mode for Home Assistant testing
+# PUMP_TYPE = "BW"
 if PUMP_TYPE:
     pump_desc = "Air-to-Water" if PUMP_TYPE == "AW" else "Brine-to-Water/Geothermal"
     print(f"✅ Operating in {PUMP_TYPE} ({pump_desc}) mode")

@@ -16,6 +16,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     storage_tank_cv: "sensor.storage_tank_cv_temp",
     storage_tank_vv: "sensor.storage_tank_vv_temp",
     evaporator_temp: "sensor.evaporator_temp",
+    cold_side_warm_temp: "sensor.cold_side_warm_temp",
+    cold_side_cold_temp: "sensor.cold_side_cold_temp",
     hp_temp: "sensor.compressor_hp",
     lp_temp: "sensor.compressor_lp",
     em23_power: "sensor.em23_power",
@@ -122,6 +124,8 @@ function overrideTempSensorClicks(card, hass) {
     cvForward: { entityId: "sensor.cv_forward_temp", historyKey: "cv_forward_temp" },
     cvReturn: { entityId: "sensor.cv_return_temp", historyKey: "cv_return_temp" },
     evap: { entityId: "sensor.evaporator_temp", historyKey: "evaporator_temp" },
+    coldSideWarm: { entityId: "sensor.cold_side_warm_temp", historyKey: "cold_side_warm_temp" },
+    coldSideCold: { entityId: "sensor.cold_side_cold_temp", historyKey: "cold_side_cold_temp" },
     hp: { entityId: "sensor.compressor_hp", historyKey: "compressor_hp_temp" },
     lp: { entityId: "sensor.compressor_lp", historyKey: "compressor_lp_temp" }
   };

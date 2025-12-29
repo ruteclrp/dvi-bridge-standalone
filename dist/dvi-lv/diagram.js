@@ -112,6 +112,9 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 
 	// circulation pump sensor used to show/hide CV pump & CV flow gifs
 	const circPumpSensorState = getStateByName("Circ. pump CV");
+	
+	// geothermal/brine pump sensor used for BW pumps (to show brine loop & cold side temps)
+	const geothermalPumpState = getStateByName("Circ. pump geothermal");
     
 	// Build aux icon HTML according to rules:
 	// - "Off" -> don't show
@@ -247,7 +250,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 		}
 
     ${
-			isPumpTypeBW && coldSideWarmTemp !== null && compState === "on"
+			isPumpTypeBW && coldSideWarmTemp !== null && geothermalPumpState === "on"
 				? `<div class="diagram-label label-cold-side-warm" data-key="coldSideWarm">${valueWithUnit(
 						"coldSideWarm",
 						coldSideWarmTemp,
@@ -256,7 +259,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 		}
 
     ${
-			isPumpTypeBW && coldSideColdTemp !== null && compState === "on"
+			isPumpTypeBW && coldSideColdTemp !== null && geothermalPumpState === "on"
 				? `<div class="diagram-label label-cold-side-cold" data-key="coldSideCold">${valueWithUnit(
 						"coldSideCold",
 						coldSideColdTemp,
@@ -318,7 +321,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
       <img src="${imageBase}CVflow_on.gif" alt="CV flow" />
     </div>
 
-    <div class="diagram-icon icon-hp-loop" data-icon-key="comp" style="opacity:${compState === "on" ? 1 : 0};">
+    <div class="diagram-icon icon-hp-loop" data-icon-key="comp" style="opacity:${isPumpTypeBW ? (geothermalPumpState === "on" ? 1 : 0) : (compState === "on" ? 1 : 0)};">
       <img src="${imageBase}/${evapLoopImage}" alt="${isPumpTypeBW ? 'Brine' : 'HP'} on" />
     </div>
     <div class="diagram-icon icon-comp-unit" data-icon-key="comp" style="opacity:${compState === "on" ? 1 : 0};">

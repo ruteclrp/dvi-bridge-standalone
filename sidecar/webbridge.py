@@ -134,6 +134,8 @@ def api_history(sensor_name):
             "evaporator_temp": "Evaporator",
             "compressor_hp_temp": "Compressor HP",
             "compressor_lp_temp": "Compressor LP",
+            "cold_side_warm_temp": "Cold side warm",
+            "cold_side_cold_temp": "Cold side cold",
             "defrost": "Defrost"
         }
         

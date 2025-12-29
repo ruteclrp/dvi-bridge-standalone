@@ -18,6 +18,8 @@ class LvHeatpumpCard extends HTMLElement {
 			const data = await response.json();
 			if (data && data.pump_type) {
 				this._pumpType = data.pump_type;
+				// Update header with new pump type
+				this._updateHeader();
 				// Trigger re-render if hass is already set
 				if (this._hass && this._config && this._root) {
 					this._renderDiagram();
@@ -32,6 +34,15 @@ class LvHeatpumpCard extends HTMLElement {
 		return new URL("./dvi-lv/", import.meta.url).href;
 	}
 
+	_updateHeader() {
+		if (!this._root) return;
+		const header = this._root.getElementById("card-header");
+		if (header) {
+			const pumpTypeLabel = this._pumpType === "BW" ? "BW" : "AW";
+			header.textContent = `DVI ${pumpTypeLabel} Compact varmepumpe`;
+		}
+	}
+
 	setConfig(config) {
 		if (!config.cv_mode || !config.vv_mode) {
 			throw new Error("You must define at least 'cv_mode' and 'vv_mode' entities");
@@ -42,10 +53,11 @@ class LvHeatpumpCard extends HTMLElement {
 		this._root.innerHTML = `
       <style>@import url("${styleUrl}");</style>
       <ha-card>
-        <div class="header">DVI LV Compact varmepumpe</div>
+        <div class="header" id="card-header"></div>
         <div class="diagram" id="diagram"></div>
       </ha-card>
     `;
+		this._updateHeader();
 	}
 
 	set hass(hass) {

@@ -11,6 +11,7 @@ ha-card {
 	margin-bottom: 8px;
 	font-size: 1.2em;
 	font-weight: 600;
+	text-align: center;
 }
 
 /* ============ Diagram Canvas ============ */

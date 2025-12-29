@@ -26,6 +26,7 @@ STATE_POLL_INTERVAL = 1.0  # seconds
 # -----------------------------------------------------------------------------
 
 states = {}
+pump_type = "AW"  # Default to AW, will be updated from state.json
 state_lock = threading.Lock()
 commands_lock = threading.Lock()
 
@@ -41,6 +42,7 @@ for entity_id, cfg in ENTITY_MAP.items():
     }
 
 def load_state_loop():
+    global pump_type
     last_mtime = 0
 
     while True:
@@ -49,6 +51,10 @@ def load_state_loop():
             if stat.st_mtime != last_mtime:
                 with open(STATE_PATH) as f:
                     payload = json.load(f)
+
+                # Extract pump type from payload
+                if "pump_type" in payload:
+                    pump_type = payload["pump_type"]
 
                 with state_lock:
                     for entity_id, cfg in ENTITY_MAP.items():
@@ -108,6 +114,11 @@ def index():
 def api_states():
     with state_lock:
         return jsonify(states)
+
+@app.route("/api/pump_type")
+def api_pump_type():
+    """Return the detected pump type (AW or BW)"""
+    return jsonify({"pump_type": pump_type})
 
 @app.route("/api/history/<sensor_name>")
 def api_history(sensor_name):

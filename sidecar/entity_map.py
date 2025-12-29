@@ -72,6 +72,24 @@ ENTITY_MAP = {
       "friendly_name": "Kompressor LP"
     }
   },
+  "sensor.cold_side_warm": {
+    "source": ("input_registers", "Cold side warm"),
+    "domain": "sensor",
+    "attributes": {
+      "unit_of_measurement": "°C",
+      "device_class": "temperature",
+      "friendly_name": "Kold side varm"
+    }
+  },
+  "sensor.cold_side_cold": {
+    "source": ("input_registers", "Cold side cold"),
+    "domain": "sensor",
+    "attributes": {
+      "unit_of_measurement": "°C",
+      "device_class": "temperature",
+      "friendly_name": "Kold side kold"
+    }
+  },
   "sensor.em23_power": {
     "source": ("input_registers", "em23_power"), 
     "domain": "sensor",
@@ -146,6 +164,14 @@ ENTITY_MAP = {
     "attributes": {
       "device_class": "running",
       "friendly_name": "Afrimningsventil"
+    }
+  },
+  "binary_sensor.circ_pump_geothermal": {
+    "source": ("coils", "Circ. pump geothermal"),
+    "domain": "binary_sensor",
+    "attributes": {
+      "device_class": "running",
+      "friendly_name": "Cirkulationspumpe geotermisk"
     }
   },
   "binary_sensor.liquid_injection_solenoid_valve": {

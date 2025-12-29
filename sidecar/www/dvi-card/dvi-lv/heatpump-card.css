@@ -68,6 +68,16 @@ ha-card {
 	left: 16%;
 }
 
+.diagram-label.label-cold-side-warm {
+	top: 33%;  /* Placeholder - adjust position manually */
+	left: 15%;
+}
+
+.diagram-label.label-cold-side-cold {
+	top: 50%;  /* Placeholder - adjust position manually */
+	left: 20%;
+}
+
 .diagram-label.label-hp {
 	top: 31%;
 	left: 43.5%;

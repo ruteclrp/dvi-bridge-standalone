@@ -4,7 +4,7 @@ After=network.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/home/<user>/dvi-bridge-standalone/venv/bin/python /home/<user>/dvi-bridge-standalone/bridge.py
+ExecStart=/home/<user>/dvi-bridge-standalone/.venv/bin/python /home/<user>/dvi-bridge-standalone/bridge.py
 WorkingDirectory=/home/<user>/dvi-bridge-standalone
 Restart=always
 EnvironmentFile=/home/<user>/dvi-bridge-standalone/.env

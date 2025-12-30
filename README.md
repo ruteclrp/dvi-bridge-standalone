@@ -87,14 +87,23 @@ If everything is OK, the bridge will start polling the heatpump and publish JSON
 ```text
 dvi/measurement
 ```
+You may receive an error due to the dviha user not being member of the dialout group giving access to the /dev/ttyACM0 (or whatever oterh ttyAxxx port name it has).
+
+If that happens:
+Step 1: Check which group owns the device
+```bash
+ls -l /dev/ttyACM0 - and you should see something like this: crw-rw---- 1 root dialout 166, 0 ... /dev/ttyACM0
+```
+Step 2: Add your user to the dialout group
+```BASH
+sudo usermod -aG dialout dviha
+```
+Step 3: Log out and back in
+
+Test again manually
 
 Home Assistant will also receive MQTT discovery messages so entities are created automatically.
 ### 6. Running the bridge as standalone with sidecar
-
-Ensure the card files are also located in teh sidecar folders
-```bash
-cp -r /home/dviha/dvi-bridge-standalone/dist/* /home/dviha/dvi-bridge-standalone/sidecar/www/dvi-card/
-```
 
 Test the sidecar
 ```bash
@@ -107,7 +116,7 @@ python webbridge.py
 ### 7. Install the systemd service (auto‑start on boot)
 
 Copy the example service files and edit them:
-If you fun against HA you should only setup the systemd for running bridge.py
+If you run against HA you should only setup the systemd for running bridge.py
 
 If you run locally with sidecar and web access you should setup a systemd for both bridge.py and webbridge.py
 
@@ -134,26 +143,6 @@ sudo systemctl status bridge.service webbridge.service
 
 ```
 
-Replace the contents with:
-
-```ini
-[Unit]
-Description=DVI Modbus-MQTT Bridge
-After=network.target
-Wants=network-online.target
-
-[Service]
-ExecStart=/home/dviha/dvi-bridge-standalone/.venv/bin/python /home/dviha/dvi-bridge-standalone/bridge.py
-WorkingDirectory=/home/dviha/dvi-bridge-standalone
-Restart=always
-EnvironmentFile=/home/dviha/dvi-bridge-standalone/.env
-User=dviha
-Group=dviha
-
-[Install]
-WantedBy=multi-user.target
-```
-
 If you chose a different username than `dviha` when installing Raspberry Pi OS, remember to update the username in all the paths and examples in this guide.
 
 Reload systemd and enable the service:
@@ -172,6 +161,7 @@ sudo systemctl status bridge.service
 
 When it is **active (running)** and your USB connection + Modbus wiring are correct, the heatpump data should be visible in Home Assistant via MQTT discovery.
 
+When you run the sidecar standalone application webbridge.py you can access the heatpump via a browser on http://<IPof your bridge computer>:5000
 ---
 
 ## B. Home Assistant MQTT Entities
@@ -204,7 +194,7 @@ Example payload:
 }
 ```
 
-On startup the bridge also sends Home Assistant MQTT discovery messages for:
+On startup the bridge sends Home Assistant MQTT discovery messages for:
 
 - Temperature sensors
 - Binary sensors (coils)
@@ -216,9 +206,9 @@ As long as MQTT discovery is enabled in Home Assistant, all entities will appear
 
 ## C. 
 
-# DVI LV Heatpump Lovelace Card
+# DVI AW/BW Heatpump Lovelace Card
 
-The **DVI LV Heatpump card** provides a full visual diagram of your LV heatpump, live temperatures, compressor/pump status, mode controls, animated overlays, and popup panels for detailed settings.
+The **DVI Heatpump card** provides a full visual diagram of your AW or BW heatpump, live temperatures, compressor/pump status, mode controls, animated overlays, and popup panels for detailed settings.
 
 It is fully compatible with HACS and includes a visual configuration editor.
 
@@ -274,9 +264,12 @@ The auto-mapping includes:
 * CV night mode
 * VV schedule
 * AUX electric heater mode
-* All relevant temperature sensors
+* Pump type (AW or BW) for correct diagram display
+* All relevant temperature sensors (including BW cold side sensors)
 * Pump / compressor / defrost binary sensors
 * Entities for the popup panels (Info / CV / VV / AUX)
+
+**Note:** The `pump_type` entity (sensor.pump_type) is automatically detected and used to display the correct diagram (AW = Air-to-Water with evaporator, BW = Brine-to-Water/Geothermal with cold side sensors). Make sure this entity is included in your configuration.
 
 If you prefer full control, you can still override or manually edit any field in the Advanced entity mapping section.
 
@@ -298,14 +291,14 @@ browser_mod:
 
 ## 🎨 Features
 
-- Animated LV heating circuit diagram  
+- Animated AW or BW heating circuit diagram  
 - Real‑time temperatures drawn directly in the diagram  
-- Live compressor, CV pump and defrost icons  
+- Live compressor, CV pump, evaporator and defrost icon (AW), brine circuit (BW)   
 - Mode bar with:
   - CV mode + sun/moon/clock based on night mode  
   - VV mode + schedule indicator  
   - AUX heating status  
-  - Info chip showing EM23 power  
+  - Info chip showing EM23 power (if installed)
 - Popups for Info, CV, VV, AUX  
 - Buttons for:
   - CV/VV ON/OFF  

@@ -26,6 +26,7 @@ STATE_POLL_INTERVAL = 1.0  # seconds
 # -----------------------------------------------------------------------------
 
 states = {}
+pump_type = "AW"  # Default to AW, will be updated from state.json
 state_lock = threading.Lock()
 commands_lock = threading.Lock()
 
@@ -41,6 +42,7 @@ for entity_id, cfg in ENTITY_MAP.items():
     }
 
 def load_state_loop():
+    global pump_type
     last_mtime = 0
 
     while True:
@@ -50,9 +52,18 @@ def load_state_loop():
                 with open(STATE_PATH) as f:
                     payload = json.load(f)
 
+                # Extract pump type from payload
+                if "pump_type" in payload:
+                    pump_type = payload["pump_type"]
+
                 with state_lock:
                     for entity_id, cfg in ENTITY_MAP.items():
                         source_group, source_key = cfg["source"]
+
+                        # Special handling for pump_type sensor
+                        if source_group == "pump_type":
+                            states[entity_id]["state"] = pump_type
+                            continue
 
                         group = payload.get(source_group)
                         if not isinstance(group, dict):
@@ -90,15 +101,15 @@ print(f"✅ Reading state from {STATE_PATH}")
 app = Flask(__name__, static_folder=WWW_DIR, static_url_path="")
 
 # Disable caching for development
-#app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
-#@app.after_request
-#def add_no_cache_headers(response):
-#    """Add no-cache headers to prevent browser caching during development"""
-#    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-#    response.headers['Pragma'] = 'no-cache'
-#    response.headers['Expires'] = '0'
-#    return response
+@app.after_request
+def add_no_cache_headers(response):
+    """Add no-cache headers to prevent browser caching during development"""
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @app.route("/")
 def index():
@@ -107,7 +118,32 @@ def index():
 @app.route("/api/states")
 def api_states():
     with state_lock:
-        return jsonify(states)
+        states_copy = states.copy()
+        
+        # TESTING OVERRIDE: Force geothermal pump on for BW testing
+        # Uncomment the following lines to test BW mode with brine circulation active
+        # if "binary_sensor.circ_pump_geothermal" in states_copy:
+        #     states_copy["binary_sensor.circ_pump_geothermal"]["state"] = "on"
+        
+        # TESTING OVERRIDE: Add fake BW temperature sensors for testing
+        # Uncomment the following lines to test BW cold side temperatures
+        # states_copy["sensor.cold_side_warm_temp"] = {
+        #     "state": "8.5",
+        #     "attributes": {"unit_of_measurement": "°C", "friendly_name": "Cold side warm"}
+        # }
+        # states_copy["sensor.cold_side_cold_temp"] = {
+        #     "state": "2.3",
+        #     "attributes": {"unit_of_measurement": "°C", "friendly_name": "Cold side cold"}
+        # }
+        
+        return jsonify(states_copy)
+
+@app.route("/api/pump_type")
+def api_pump_type():
+    """Return the detected pump type (AW or BW)"""
+    # TESTING OVERRIDE: Uncomment the next line to force BW mode in frontend
+    # return jsonify({"pump_type": "BW"})
+    return jsonify({"pump_type": pump_type})
 
 @app.route("/api/history/<sensor_name>")
 def api_history(sensor_name):
@@ -123,6 +159,8 @@ def api_history(sensor_name):
             "evaporator_temp": "Evaporator",
             "compressor_hp_temp": "Compressor HP",
             "compressor_lp_temp": "Compressor LP",
+            "cold_side_warm_temp": "Cold side warm",
+            "cold_side_cold_temp": "Cold side cold",
             "defrost": "Defrost"
         }
         

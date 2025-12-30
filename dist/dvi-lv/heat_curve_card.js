@@ -174,8 +174,6 @@ class HeatCurveCard extends HTMLElement {
 				scales: {
 					x: {
 						title: { display: true, text: "Outdoor Temp (°C)" },
-						min: -20,
-						max: 32,
 						grid: { color: "rgba(0,0,0,0.04)" },
 						ticks: { color: "#444", maxRotation: 0 },
 					},
@@ -278,7 +276,6 @@ class HeatCurveCard extends HTMLElement {
 	_updateChart(values) {
 		if (!this.chart) return;
 
-		const temps = Array.from({ length: 53 }, (_, i) => i - 20);
 		const shift = values.cvCurve - 10;
 		const adjMinus12 = values.setMinus12 + shift;
 		const adjPlus12 = values.setPlus12 + shift;
@@ -286,10 +283,56 @@ class HeatCurveCard extends HTMLElement {
 		const cvMin = Number.isFinite(values.cvMin) ? values.cvMin : 20;
 		const cvMax = Number.isFinite(values.cvMax) ? values.cvMax : 55;
 
+		// Calculate outdoor temps where curve intersects cvMax and cvMin
+		// Formula: outdoorTemp = (cvTemp - adjMinus12) / slope - 12
+		const tempAtMax = (cvMax - adjMinus12) / slope - 12;
+		const tempAtMin = (cvMin - adjMinus12) / slope - 12;
+		
+		// Add 5°C buffer on each side
+		const buffer = 5;
+		const xMin = Math.floor(tempAtMax - buffer);
+		const xMax = Math.ceil(tempAtMin + buffer);
+		
+		// Generate temperature array for the dynamic range
+		const tempRange = xMax - xMin;
+		const temps = Array.from({ length: tempRange + 1 }, (_, i) => xMin + i);
+
 		const cvTemps = temps.map((t) => {
 			const val = adjMinus12 + slope * (t + 12);
 			return Math.max(cvMin, Math.min(cvMax, val));
 		});
+
+		// Calculate dynamic width based on actual temperature range needed
+		const pixelsPerDegree = 12; // Adjust this value to control spacing
+		const bufferSpace = 100; // Padding on each side for labels and margins
+		const calculatedWidth = (tempRange * pixelsPerDegree) + (bufferSpace * 2);
+		
+		// Set canvas and container width dynamically
+		const chartContainer = this._canvas.parentElement;
+		if (chartContainer) {
+			// Don't set canvas.width attribute as it affects resolution, just use CSS
+			this._canvas.style.width = `${calculatedWidth}px`;
+			chartContainer.style.width = `${calculatedWidth}px`;
+			
+			// Set ha-card width to match (this makes the popup resize)
+			const haCard = this.querySelector('ha-card');
+			if (haCard) {
+				haCard.style.width = `${calculatedWidth}px`;
+				// Override browser_mod's max-width CSS variable
+				haCard.style.setProperty('--popup-max-width', `${calculatedWidth + 50}px`);
+			}
+			
+			// Try to set the CSS variable on the dialog itself
+			const dialog = this.closest('ha-dialog, [role="dialog"]');
+			if (dialog) {
+				dialog.style.setProperty('--popup-max-width', `${calculatedWidth + 50}px`);
+				dialog.style.setProperty('--mdc-dialog-max-width', `${calculatedWidth + 50}px`);
+			}
+		}
+
+		// Update chart X-axis range
+		this.chart.options.scales.x.min = xMin;
+		this.chart.options.scales.x.max = xMax;
 
 		this.chart.data.labels = temps;
 		this.chart.data.datasets[0].data = cvTemps;

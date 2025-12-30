@@ -134,11 +134,28 @@ MQTT_PASS: Optional[str] = os.getenv("MQTT_PASS") or None
 MQTT_HOST = os.getenv("MQTT_HOST", "127.0.0.1")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 
-# Get heatpump model from environment variable
-HEATPUMP_MODEL = os.getenv("HEATPUMP_MODEL", "LV")
-if HEATPUMP_MODEL == "LV":
-    print("⚠️ HEATPUMP_MODEL not set in .env, using placeholder LV")
+# Detect pump type from register 0x15 (0=AW, 1=BW)
+PUMP_TYPE = None  # Will be determined from register 0x15
 
+def detect_pump_type() -> Optional[str]:
+    """Read register 0x15 to determine pump type: 0=AW (Air-to-Water), 1=BW (Brine-to-Water/Geothermal)"""
+    try:
+        with modbus_lock:
+            payload = struct.pack('>HH', 0x15, 0x0000)
+            response = instrument._perform_command(6, payload)
+            _, value = struct.unpack('>HH', response)
+            if value == 0:
+                print("✅ Detected pump type: AW (Air-to-Water) (register 0x15 = 0)")
+                return "AW"
+            elif value == 1:
+                print("✅ Detected pump type: BW (Brine-to-Water/Geothermal) (register 0x15 = 1)")
+                return "BW"
+            else:
+                print(f"⚠️ Unknown pump type value in register 0x15: {value}")
+                return None
+    except Exception as e:
+        print(f"❌ Failed to read pump type from register 0x15: {e}")
+        return None
 
 
 # MQTT setup
@@ -150,11 +167,12 @@ if MQTT_USER and MQTT_PASS:
     mqtt_client.username_pw_set(MQTT_USER, MQTT_PASS)
 
 def _build_device_info() -> dict:
+    pump_model = PUMP_TYPE or "Unknown"
     device = {
-        "name": f"DVI {HEATPUMP_MODEL}",
-        "identifiers": [f"dvi_{HEATPUMP_MODEL.lower()}"],
+        "name": f"DVI {pump_model}",
+        "identifiers": [f"dvi_{pump_model.lower()}"],
         "manufacturer": "DVI",
-        "model": f"{HEATPUMP_MODEL} Heatpump"
+        "model": f"{pump_model} Heatpump"
     }
     if PUMP_ID:
         device["identifiers"].append(f"pump_{PUMP_ID}")
@@ -235,7 +253,8 @@ def publish_discovery_select(name, unique_id, command_topic, state_template, opt
     mqtt_client.publish(config_topic, msg, retain=True)
 
 # Coil mapping (coil 13 omitted)
-coil_names = {
+# Base coil names for AW (Air-to-Water) type - all coils valid
+coil_names_aw = {
     0: "Soft starter Compressor",
     1: "3-Way shunt VV open/close",
     2: "Start/stop expansion valve",
@@ -250,9 +269,38 @@ coil_names = {
     14: "Sum alarm failure"
 }
 
+# Coil names for BW (Brine-to-Water/Geothermal) type
+coil_names_bw = {
+    0: "Soft starter Compressor",
+    # 1: excluded (AW-only: 3-Way shunt VV open/close)
+    2: "Start/stop expansion valve",
+    3: "Heating element",
+    4: "Circ. pump warm side",
+    # 5: not used for BW
+    8: "Circ. pump geothermal",  # Different name for BW
+    # 9: not used for BW
+    10: "3-way shunt CV open",
+    11: "3-way shunt CV close",
+    12: "Circ. pump CV",
+    # 14: not used for BW
+}
+
+def filter_coils_by_type(pump_type: Optional[str]) -> dict:
+    """Return only the coils applicable to the detected pump type"""
+    if pump_type is None:
+        return coil_names_aw  # If type unknown, return AW (all coils)
+    elif pump_type == "AW":
+        return coil_names_aw
+    elif pump_type == "BW":
+        return coil_names_bw
+    else:
+        return coil_names_aw
+
 # FC04 sensor mapping and filtering
-omit_fc04 = {"sensor_4", "sensor_8", "sensor_9", "sensor_10", "sensor_13", "sensor_14"}
-fc04_labels = {
+omit_fc04 = {"sensor_4", "sensor_8", "sensor_9", "sensor_10"}
+
+# FC04 sensors for AW (Air-to-Water) type
+fc04_labels_aw = {
     "sensor_1": "CV Forward",
     "sensor_2": "CV Return",
     "sensor_3": "Storage tank VV",
@@ -262,6 +310,31 @@ fc04_labels = {
     "sensor_11": "Compressor HP",
     "sensor_12": "Compressor LP"
 }
+
+# FC04 sensors for BW (Brine-to-Water/Geothermal) type
+fc04_labels_bw = {
+    "sensor_1": "CV Forward",
+    "sensor_2": "CV Return",
+    "sensor_3": "Storage tank VV",
+    "sensor_5": "Storage tank CV",
+    # sensor_6 excluded (AW-only: Evaporator)
+    "sensor_7": "Outdoor",
+    "sensor_11": "Compressor HP",
+    "sensor_12": "Compressor LP",
+    "sensor_13": "Cold side warm",   # BW-specific
+    "sensor_14": "Cold side cold"    # BW-specific
+}
+
+def filter_fc04_by_type(pump_type: Optional[str]) -> dict:
+    """Return only the FC04 sensors applicable to the detected pump type"""
+    if pump_type is None:
+        return fc04_labels_aw  # If type unknown, return AW
+    elif pump_type == "AW":
+        return fc04_labels_aw
+    elif pump_type == "BW":
+        return fc04_labels_bw
+    else:
+        return fc04_labels_aw
 
 # Modbus-safe wrappers
 def read_coils():
@@ -276,7 +349,16 @@ def read_coils():
         bitmask = (response[2] << 8) | response[1]
         bits = [(bitmask >> i) & 1 for i in range(16)]
 
-        return dict(sorted({coil_names[i]: bits[i] for i in coil_names}.items()))
+        # Filter coils based on pump type
+        active_coils = filter_coils_by_type(PUMP_TYPE)
+        result = dict(sorted({active_coils[i]: bits[i] for i in active_coils}.items()))
+        
+        # TESTING OVERRIDE: Force geothermal pump on for BW testing
+        # Uncomment the next line to test BW mode with brine circulation active
+        # if "Circ. pump geothermal" in result:
+        #     result["Circ. pump geothermal"] = 1
+        
+        return result
     except Exception as e:
         print(f"FC01 read failed: {e}")
         return {}
@@ -590,8 +672,12 @@ mode_options = {
 def publish_all_discovery() -> None:
     """Publish alle Home Assistant discovery configs (kaldes ved hver MQTT connect)."""
 
+    # Filter coils and sensors based on detected pump type (AW vs BW)
+    active_coils = filter_coils_by_type(PUMP_TYPE)
+    active_fc04 = filter_fc04_by_type(PUMP_TYPE)
+
     # Coils -> binary_sensors
-    for idx, label in coil_names.items():
+    for idx, label in active_coils.items():
         publish_discovery_binary(
             name=label,
             unique_id=f"dvi_coil_{idx}",
@@ -599,7 +685,7 @@ def publish_all_discovery() -> None:
         )
 
     # FC04 sensors -> temperature sensors
-    for key, label in fc04_labels.items():
+    for key, label in active_fc04.items():
         publish_discovery_sensor(
             name=label,
             unique_id=f"dvi_fc04_{key}",
@@ -638,6 +724,31 @@ def publish_all_discovery() -> None:
         name="Service Date",
         unique_id="dvi_static_service_date",
         value_template="{{ '%s-%s-%s' | format(value_json.service_date.dd, value_json.service_date.mm, value_json.service_date.yy) }}",
+        entity_category="diagnostic"
+    )
+
+    # Pump type, ID, and firmware versions
+    publish_discovery_sensor(
+        name="Pump Type",
+        unique_id="dvi_static_pump_type",
+        value_template="{{ value_json.pump_type }}"
+    )
+    publish_discovery_sensor(
+        name="Pump ID",
+        unique_id="dvi_static_pumpid",
+        value_template="{{ value_json.pumpid }}",
+        entity_category="diagnostic"
+    )
+    publish_discovery_sensor(
+        name="Firmware Version Bottom",
+        unique_id="dvi_static_sw_bot",
+        value_template="{{ value_json.sw_bot }}",
+        entity_category="diagnostic"
+    )
+    publish_discovery_sensor(
+        name="Firmware Version Top",
+        unique_id="dvi_static_sw_top",
+        value_template="{{ value_json.sw_top }}",
         entity_category="diagnostic"
     )
 
@@ -744,31 +855,6 @@ def publish_all_discovery() -> None:
                     entity_category="config"
                 )
                 print(f"🟢 Published number discovery: {label} -> dvi/command/cvmin")
-
-#            elif label == "outdoor_cal":
-#                publish_discovery_number(
-#                    name=label,
-#                    unique_id=f"dvi_fc06_{label}",
-#                    command_topic="dvi/command/outdoorcal",
-#                    state_template=f"{{{{ value_json.write_registers['{label}'] }}}}",
-#                    min_val=-5,
-#                    max_val=5,
-#                    step=1,
-#                    unit="°C",
-#                    entity_category="config"
-#                )
-#                print(f"🟢 Published number discovery: {label} -> dvi/command/outdoorcal")#
-
-            elif label == "outdoor_cal":
-                publish_discovery_sensor(
-                    name=label,
-                    unique_id=f"dvi_fc06_{label}",
-                    value_template=f"{{{{ value_json.write_registers['{label}'] }}}}",
-                    unit="°C",
-                    device_class="temperature",
-                    state_class="measurement"
-                )
-                print(f"🟢 Published sensor discovery: {label}")
 
             elif label == "curve_temp":
                 publish_discovery_sensor(
@@ -985,6 +1071,16 @@ CURVE_MAPS = {
     },
 }
 
+# Detect pump type before starting main loop
+PUMP_TYPE = detect_pump_type()
+# TESTING OVERRIDE: Uncomment the next line to force BW mode for Home Assistant testing
+# PUMP_TYPE = "BW"
+if PUMP_TYPE:
+    pump_desc = "Air-to-Water" if PUMP_TYPE == "AW" else "Brine-to-Water/Geothermal"
+    print(f"✅ Operating in {PUMP_TYPE} ({pump_desc}) mode")
+else:
+    print("⚠️ Could not detect pump type, defaulting to AW (Air-to-Water) configuration")
+
 # Start MQTT and push net config once at startup
 mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
 mqtt_client.loop_start()
@@ -1012,10 +1108,14 @@ while True:
             if val is not None:
                 fc04_raw[f"sensor_{reg}"] = val
 
+        # Filter FC04 sensors based on pump type
+        active_fc04 = filter_fc04_by_type(PUMP_TYPE)
         for key, raw in fc04_raw.items():
             if key in omit_fc04:
                 continue
-            label = fc04_labels.get(key, key)
+            if key not in active_fc04:
+                continue  # Skip sensors not applicable to this pump type
+            label = active_fc04[key]
             last_inputs[label] = round(raw * 0.1, 1)
 
         # EM23 power (FC04)
@@ -1106,19 +1206,20 @@ while True:
 
     # Sample sensor history every 60 seconds (all temperature sensors)
     if now - last_history_sample >= HISTORY_SAMPLE_INTERVAL:
-        history_sensors = {
-            "Storage tank VV": last_inputs.get("Storage tank VV"),
-            "Storage tank CV": last_inputs.get("Storage tank CV"),
-            "CV Forward": last_inputs.get("CV Forward"),
-            "CV Return": last_inputs.get("CV Return"),
-            "Outdoor": last_inputs.get("Outdoor"),
-            "Evaporator": last_inputs.get("Evaporator"),
-            "Compressor HP": last_inputs.get("Compressor HP"),
-            "Compressor LP": last_inputs.get("Compressor LP"),
-            "Defrost": 1 if last_coils.get("4-way valve defrost") else 0
-        }
-        # Filter out None values (but keep 0 for defrost)
-        history_sensors = {k: v for k, v in history_sensors.items() if v is not None}
+        # Build history sensors dict based on available sensors
+        history_sensors = {}
+        active_fc04 = filter_fc04_by_type(PUMP_TYPE)
+        
+        # Only include sensors that are applicable to this pump type
+        for sensor_label in active_fc04.values():
+            val = last_inputs.get(sensor_label)
+            if val is not None:
+                history_sensors[sensor_label] = val
+        
+        # Add defrost status if available
+        defrost_coil = "4-way valve defrost" if PUMP_TYPE == "AW" else "Circ. pump geothermal"
+        if defrost_coil in last_coils:
+            history_sensors["Defrost"] = 1 if last_coils.get(defrost_coil) else 0
         
         if history_sensors:
             save_history_sample(history_sensors)
@@ -1132,7 +1233,9 @@ while True:
         "input_registers": dict(sorted(last_inputs.items())),
         "write_registers": dict(sorted(last_writes.items()))
     }
-    # Eksponér pumpid, SW-versioner + install/service date i measurement payload
+    # Eksponér pumpid, pump_type, SW-versioner + install/service date i measurement payload
+    if PUMP_TYPE:
+        full_payload["pump_type"] = PUMP_TYPE
     if PUMP_ID:
         full_payload["pumpid"] = PUMP_ID
     if SWBOT:

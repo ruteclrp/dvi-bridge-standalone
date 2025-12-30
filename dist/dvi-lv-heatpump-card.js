@@ -115,6 +115,7 @@ class LvHeatpumpCard extends HTMLElement {
 		if (!this._hass) return;
 		this._hass.callService("browser_mod", "popup", {
 			title: "Kurvetemperatur",
+			size: "wide",
 			content: {
 				type: "custom:heat-curve-card",
 				title: "Kurvetemperatur",

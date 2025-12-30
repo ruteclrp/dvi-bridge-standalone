@@ -135,9 +135,9 @@ ha-card {
 
 /* BW-specific positioning for brine loop */
 .diagram-icon.icon-hp-loop[data-pump-type="bw"] {
-	top: 63.2%;  /* Adjust as needed */
-	left: 18.4%;  /* Adjust as needed */
-	width: 33.9%;  /* Adjust as needed */
+	top: 62.4%;  /* Adjust as needed */
+	left: 17.%;  /* Adjust as needed */
+	width: 35%;  /* Adjust as needed */
 }
 
 .diagram-icon.icon-comp-unit {
@@ -148,9 +148,9 @@ ha-card {
 
 /* BW-specific positioning for compressor */
 .diagram-icon.icon-comp-unit[data-pump-type="bw"] {
-	top: 63.3%;  /* Adjust as needed */
+	top: 62.4%;  /* Adjust as needed */
 	left: 46%;  /* Adjust as needed */
-	width: 21.3%;  /* Adjust as needed */
+	width: 22%;  /* Adjust as needed */
 }
 
 .diagram-element.icon-defrost {

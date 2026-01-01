@@ -20,11 +20,18 @@ ha-card {
 	width: 100%;
 	max-width: 600px;
 	margin: 0 auto 16px;
+	/* Maintain 550:380 aspect ratio (original background dimensions) */
+	aspect-ratio: 550 / 380;
+	/* Ensure no extra spacing from box model */
+	line-height: 0;
 }
 
 .diagram-base {
 	width: 100%;
+	height: 100%;
 	display: block;
+	/* Ensure image fills exactly without gaps */
+	vertical-align: top;
 }
 
 /* ============ Interaction Helpers ============ */
@@ -34,11 +41,12 @@ ha-card {
 
 /* ============ Diagram Labels ============ */
 .diagram-label,
-.diagram-element,
-.diagram-icon {
+.diagram-element {
 	position: absolute;
 	transform: translate(-50%, -50%);
 }
+
+/* Note: .diagram-icon positioning is defined separately in Diagram Icons section */
 
 .diagram-label {
 	font-size: 0.9em;
@@ -110,47 +118,65 @@ ha-card {
 }
 
 /* ============ Diagram Icons ============ */
+/* Overlay GIFs positioned using exact pixel measurements from 550×380 background */
+.diagram-icon {
+	position: absolute;
+	/* Use top-left corner positioning (no centering transform) */
+	transform: none;
+}
+
 .diagram-icon img {
 	width: 100%;
-	height: auto;
+	height: 100%;
+	display: block;
 }
 
+/* CV_on.gif: 114×168px at (436, 212) */
 .diagram-icon.icon-cv-pump {
-	top: 78.40%;
-	left: 89.0%;
-	width: 20.5%;
+	top: 55.79%;   /* 212/380 */
+	left: 79.27%;  /* 436/550 */
+	width: 20.73%; /* 114/550 */
+	height: 44.21%; /* 168/380 */
 }
 
+/* CVflow_on.gif: 80×83px at (356, 297) */
 .diagram-icon.icon-cv-flow {
-	top: 89.37%;
-	left: 71.72%;
-	width: 14.2%;
+	top: 78.16%;   /* 297/380 */
+	left: 64.73%;  /* 356/550 */
+	width: 14.55%; /* 80/550 */
+	height: 21.84%; /* 83/380 */
 }
 
+/* HP_on.gif (AW): 191×288px at (0, 92) */
 .diagram-icon.icon-hp-loop {
-	top: 63.2%;
-	left: 18.4%;
-	width: 33.9%;
+	top: 24.21%;   /* 92/380 */
+	left: 0%;      /* 0/550 */
+	width: 34.73%; /* 191/550 */
+	height: 75.79%; /* 288/380 */
 }
 
-/* BW-specific positioning for brine loop */
+/* brine_on.gif (BW): 191×288px at (0, 92) - same as AW */
 .diagram-icon.icon-hp-loop[data-pump-type="bw"] {
-	top: 62.4%;  /* Adjust as needed */
-	left: 17.%;  /* Adjust as needed */
-	width: 35%;  /* Adjust as needed */
+	top: 24.21%;   /* 92/380 */
+	left: 0%;      /* 0/550 */
+	width: 34.73%; /* 191/550 */
+	height: 75.79%; /* 288/380 */
 }
 
+/* COMP_on.gif (AW): 120×288px at (191, 92) */
 .diagram-icon.icon-comp-unit {
-	top: 63.3%;
-	left: 46%;
-	width: 21.3%;
+	top: 24.21%;   /* 92/380 */
+	left: 34.73%;  /* 191/550 */
+	width: 21.82%; /* 120/550 */
+	height: 75.79%; /* 288/380 */
 }
 
-/* BW-specific positioning for compressor */
+/* comp_bw_on.gif (BW): 120×288px at (191, 92) - same as AW */
 .diagram-icon.icon-comp-unit[data-pump-type="bw"] {
-	top: 62.4%;  /* Adjust as needed */
-	left: 46%;  /* Adjust as needed */
-	width: 22%;  /* Adjust as needed */
+	top: 24.21%;   /* 92/380 */
+	left: 34.73%;  /* 191/550 */
+	width: 21.82%; /* 120/550 */
+	height: 75.79%; /* 288/380 */
 }
 
 .diagram-element.icon-defrost {

@@ -209,7 +209,7 @@ class HeatCurveCard extends HTMLElement {
 						callbacks: {
 							label: (ctx) => {
 								const y = ctx.parsed?.y;
-								return `${ctx.dataset.label}: ${y !== undefined ? `${y}°C` : ""}`;
+								return `${ctx.dataset.label}: ${y !== undefined ? `${y.toFixed(1)}°C` : ""}`;
 							},
 						},
 					},

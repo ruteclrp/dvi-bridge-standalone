@@ -30,8 +30,6 @@ ha-card {
 	width: 100%;
 	height: 100%;
 	display: block;
-	/* Ensure image fills exactly without gaps */
-	vertical-align: top;
 }
 
 /* ============ Interaction Helpers ============ */
@@ -187,6 +185,14 @@ ha-card {
 .diagram-element.icon-aux {
 	top: 70%;
 	left: 69%;
+}
+
+/* aux_on.gif and aux_auto.gif: 80×85px at (356, 212) */
+.diagram-icon.icon-aux-gif {
+	top: 55.79%;   /* 212/380 */
+	left: 64.73%;  /* 356/550 */
+	width: 14.55%; /* 80/550 */
+	height: 22.37%; /* 85/380 */
 }
 
 /* ============ Mode Chips ============ */

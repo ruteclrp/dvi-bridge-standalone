@@ -90,6 +90,8 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 		const normalized = normalizeState(state);
 		if (normalized === "off" || normalized === "0") return false;
 		if (normalized === "on" || normalized === "1") return true;
+		if (normalized === "automatic") return true;
+		if (normalized === "backup operation") return true;
 		if (normalized === "timer" || normalized === "2") {
 			if (schedule) {
 				const schedNorm = normalizeState(schedule);
@@ -118,8 +120,8 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
     
 	// Build aux icon HTML according to rules:
 	// - "Off" -> don't show
-	// - "On" -> always yellow
-	// - "Automatic" -> yellow when heatingElementState indicates active ("1"/"on"/"true"), otherwise inactive color
+	// - "Automatic" -> show aux_on.gif when heating active, aux_auto.gif when inactive
+	// - "Backup operation" -> always show aux_on.gif (always on mode)
 	let auxDiagramIconHtml = "";
 	let auxChipIconHtml = "";
 	if (auxHeating) {
@@ -129,30 +131,43 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 			auxDiagramIconHtml = "";
 			auxChipIconHtml = "";
 		} else {
-			// compute color based on mode and heating element sensor (same logic for both)
-			let color = "var(--disabled-text-color)";
-			if (auxNorm === "on") {
-				color = "var(--warning-color, #fdd835)";
+			// compute chip icon color based on mode
+			let chipIconColor;
+			if (auxNorm === "backup operation") {
+				// Backup operation mode (always on) - yellow icon and aux_on.gif
+				chipIconColor = "var(--warning-color, #fdd835)";
+				auxDiagramIconHtml = `<img
+					src="${imageBase}aux_on.gif"
+					class="diagram-icon icon-aux-gif"
+					data-icon-key="aux"
+					alt="Aux On" />`;
 			} else if (auxNorm === "automatic") {
 				const heatingActive = heatingElementState && (heatingElementState.toLowerCase() === "on");
-				color = heatingActive ? "var(--warning-color, #fdd835)" : "var(--disabled-text-color)";
+				// Use same color scheme as CV/VV chips for automatic mode
+				chipIconColor = "var(--chip-active-text, var(--primary-text-color))";
+				// Show aux_on.gif when heating is active, aux_auto.gif when inactive
+				if (heatingActive) {
+					auxDiagramIconHtml = `<img
+						src="${imageBase}aux_on.gif"
+						class="diagram-icon icon-aux-gif"
+						data-icon-key="aux"
+						alt="Aux On" />`;
+				} else {
+					auxDiagramIconHtml = `<img
+						src="${imageBase}aux_auto.gif"
+						class="diagram-icon icon-aux-gif"
+						data-icon-key="aux"
+						alt="Aux Auto" />`;
+				}
 			} else {
 				// fallback keep disabled color
-				color = "var(--disabled-text-color)";
+				chipIconColor = "var(--disabled-text-color)";
 			}
-
-			// diagram icon: must keep diagram-element so it is placed on the diagram
-			auxDiagramIconHtml = `<ha-icon
-				class="diagram-element icon-aux"
-				data-icon-key="aux"
-				style="color:${color};"
-				icon="mdi:lightning-bolt-outline">
-			</ha-icon>`;
 
 			// chip icon: do NOT include diagram-element; give a chip-specific class so it flows inside the chip
 			auxChipIconHtml = `<ha-icon
 				class="icon-aux chip-icon"
-				style="color:${color};"
+				style="color:${chipIconColor};"
 				icon="mdi:lightning-bolt-outline">
 			</ha-icon>`;
 		}
@@ -208,7 +223,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 		defrost: config.defrost_icon,
 		comp: config.comp_icon,
 		cvPump: config.cv_pump_icon,
-		aux: config.aux_heating,
+		aux: config.heating_element || config.aux_heating,
 	};
 
 	const cvNightIcon = cvNight ? CV_NIGHT_ICONS[cvNight] ?? null : null;

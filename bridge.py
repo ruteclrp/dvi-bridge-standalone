@@ -1221,9 +1221,16 @@ while True:
         if defrost_coil in last_coils:
             history_sensors["Defrost"] = 1 if last_coils.get(defrost_coil) else 0
         
+        # Add aux heating element status if available
+        if "Heating element" in last_coils:
+            history_sensors["Aux heating"] = 1 if last_coils.get("Heating element") else 0
+        
         if history_sensors:
             save_history_sample(history_sensors)
-            sensor_list = ", ".join([f"{k}={v}°C" if k != "Defrost" else f"{k}={'ON' if v else 'OFF'}" for k, v in history_sensors.items()])
+            sensor_list = ", ".join([
+                f"{k}={v}°C" if k not in ["Defrost", "Aux heating"] else f"{k}={'ON' if v else 'OFF'}" 
+                for k, v in history_sensors.items()
+            ])
             print(f"📊 History sample: {sensor_list}")
         last_history_sample = now
 

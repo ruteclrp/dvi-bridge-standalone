@@ -207,6 +207,29 @@ function overrideTempSensorClicks(card, hass) {
       };
       console.log("✅ Defrost icon click handler installed");
     }
+
+    const auxIcons = diagram.querySelectorAll('[data-icon-key="aux"]');
+    auxIcons.forEach(auxIcon => {
+      if (auxIcon && !auxIcon._auxOverridden) {
+        auxIcon._auxOverridden = true;
+        auxIcon.classList.add("clickable");
+        auxIcon.onclick = e => {
+          console.log("🖱️ Click detected on aux icon!");
+          e.preventDefault();
+          e.stopPropagation();
+
+          hass.popupCallback({
+            title: "El-patron - 24 timers historik",
+            content: {
+              type: "custom:history-card",
+              sensor: "aux_heating",
+              title: "Aux Heating Activity"
+            }
+          });
+        };
+        console.log("✅ Aux icon click handler installed");
+      }
+    });
   }
 
   const observer = new MutationObserver(mutations => {

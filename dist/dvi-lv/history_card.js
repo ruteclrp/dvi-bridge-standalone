@@ -24,10 +24,10 @@ class HistoryCard extends HTMLElement {
     
     console.log(`📊 Loading history for sensor: ${this._config.sensor}`);
     
-    // Special handling for defrost sensor
-    if (this._config.sensor === 'defrost') {
+    // Special handling for defrost and aux_heating sensors (binary/timeline view)
+    if (this._config.sensor === 'defrost' || this._config.sensor === 'aux_heating') {
       try {
-        const response = await fetch('/api/history/defrost');
+        const response = await fetch(`/api/history/${this._config.sensor}`);
         if (response.ok) {
           const data = await response.json();
           this._defrostData = data.data || [];
@@ -36,7 +36,7 @@ class HistoryCard extends HTMLElement {
           this.showNoData();
         }
       } catch (err) {
-        console.error("❌ Failed to load defrost history:", err);
+        console.error(`❌ Failed to load ${this._config.sensor} history:`, err);
         this.showError(err.message);
       }
       return;
@@ -223,7 +223,7 @@ class HistoryCard extends HTMLElement {
   }
 
   render() {
-    const isDefrostOnly = this._config.sensor === 'defrost';
+    const isDefrostOnly = this._config.sensor === 'defrost' || this._config.sensor === 'aux_heating';
     const showDefrostTimeline = isDefrostOnly || this._config.sensor === 'evaporator_temp';
     
     this.innerHTML = `
@@ -239,7 +239,7 @@ class HistoryCard extends HTMLElement {
           ${isDefrostOnly ? `
           <div class="history-card__defrost-timeline" id="defrost-timeline-${this._config.sensor}" style="padding: 40px 16px;">
             <div style="font-size: 13px; color: #666; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
-              <span>Defrost periods:</span>
+              <span>${this._config.sensor === 'aux_heating' ? 'Aux heating periods:' : 'Defrost periods:'}</span>
               <div style="display: flex; gap: 8px; align-items: center;">
                 <div style="width: 16px; height: 12px; background: #03a9f4; border-radius: 2px;"></div>
                 <span style="font-size: 12px;">Active</span>

@@ -305,28 +305,57 @@ class HeatCurveCard extends HTMLElement {
 		// Calculate dynamic width based on actual temperature range needed
 		const pixelsPerDegree = 12; // Adjust this value to control spacing
 		const bufferSpace = 100; // Padding on each side for labels and margins
-		const calculatedWidth = (tempRange * pixelsPerDegree) + (bufferSpace * 2);
+		const rightMargin = 40; // Extra space on right for axis labels (more needed for sidecar)
+		const calculatedWidth = (tempRange * pixelsPerDegree) + (bufferSpace * 2) + rightMargin;
 		
 		// Set canvas and container width dynamically
 		const chartContainer = this._canvas.parentElement;
 		if (chartContainer) {
-			// Don't set canvas.width attribute as it affects resolution, just use CSS
+			// Canvas width is the calculated width
 			this._canvas.style.width = `${calculatedWidth}px`;
-			chartContainer.style.width = `${calculatedWidth}px`;
+			// Container needs extra width for its right padding only (20px)
+			chartContainer.style.width = `${calculatedWidth + 20}px`;
 			
-			// Set ha-card width to match (this makes the popup resize)
+			// Check if we're in sidecar or HA
+			const modalBody = this.closest('.modal-body');
+			const dialog = this.closest('ha-dialog, [role="dialog"], ha-more-info-dialog, browser-mod-popup');
+			const isSidecar = modalBody && !dialog;
+			
+			// Set ha-card width to match the chart container (including right padding only)
 			const haCard = this.querySelector('ha-card');
 			if (haCard) {
-				haCard.style.width = `${calculatedWidth}px`;
-				// Override browser_mod's max-width CSS variable
-				haCard.style.setProperty('--popup-max-width', `${calculatedWidth + 50}px`);
+				haCard.style.width = `${calculatedWidth + 20}px`;
+				haCard.style.minWidth = `${calculatedWidth + 20}px`;
+				// Only constrain maxWidth in HA to prevent overflow
+				haCard.style.maxWidth = isSidecar ? `${calculatedWidth + 20}px` : '100%';
+				haCard.style.boxSizing = 'border-box';
+				haCard.style.overflowX = 'hidden'; // Prevent internal scrollbar
 			}
 			
-			// Try to set the CSS variable on the dialog itself
-			const dialog = this.closest('ha-dialog, [role="dialog"]');
+			// For sidecar: notify modal to resize
+			if (isSidecar) {
+				const modalContent = modalBody.closest('.modal-content');
+				if (modalContent) {
+					// haCard width is calculatedWidth + 20 (chart right padding) + modal-body padding
+					const modalWidth = calculatedWidth + 20 + 16;
+					modalContent.style.width = `${modalWidth}px`;
+					modalContent.style.maxWidth = '90vw';
+					modalContent.style.overflowX = 'hidden';
+				}
+				// Use minimal modal-body padding for breathing room
+				modalBody.style.paddingLeft = '8px';
+				modalBody.style.paddingRight = '8px';
+			}
+			
+			// For HA: Try to resize browser-mod popup
 			if (dialog) {
-				dialog.style.setProperty('--popup-max-width', `${calculatedWidth + 50}px`);
-				dialog.style.setProperty('--mdc-dialog-max-width', `${calculatedWidth + 50}px`);
+				// Set dialog width to accommodate content with proper padding
+				const dialogWidth = calculatedWidth + 20 + 20; // +20 for chart padding, +20 for dialog margins
+				// MDC variables need to match the outer dialog width to prevent constraint
+				dialog.style.setProperty('--mdc-dialog-min-width', `${dialogWidth}px`);
+				dialog.style.setProperty('--mdc-dialog-max-width', `${dialogWidth}px`);
+				dialog.style.width = `${dialogWidth}px`;
+				dialog.style.maxWidth = `${dialogWidth}px`;
 			}
 		}
 

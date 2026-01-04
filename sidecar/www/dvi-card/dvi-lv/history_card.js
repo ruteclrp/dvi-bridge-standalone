@@ -6,6 +6,20 @@ class HistoryCard extends HTMLElement {
     this._chart = null; // Store chart instance
   }
   
+  formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`;
+    } else {
+      return `${secs}s`;
+    }
+  }
+  
   setConfig(config) {
     this._config = config;
     this.render();
@@ -140,6 +154,9 @@ class HistoryCard extends HTMLElement {
       periods.push({ start: periodStart, end: endTime });
     }
     
+    // Get tooltip element
+    const tooltip = this.querySelector(`#bar-tooltip-${this._config.sensor}`);
+    
     // Render bars for each period
     periods.forEach(period => {
       const startPercent = ((period.start - startTime) / duration) * 100;
@@ -153,7 +170,36 @@ class HistoryCard extends HTMLElement {
         height: 100%;
         background: #03a9f4;
         opacity: 0.8;
+        cursor: pointer;
       `;
+      
+      // Add hover handlers for tooltip
+      if (tooltip) {
+        const durationSeconds = period.end - period.start;
+        const startDate = new Date(period.start * 1000);
+        const endDate = new Date(period.end * 1000);
+        const startTime = startDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const endTime = endDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+        const durationStr = this.formatDuration(durationSeconds);
+        
+        bar.addEventListener('mouseenter', (e) => {
+          tooltip.textContent = `${startTime} → ${endTime}  (${durationStr})`;
+          tooltip.style.display = 'block';
+          
+          // Position tooltip above the bar
+          const rect = bar.getBoundingClientRect();
+          const tooltipRect = tooltip.getBoundingClientRect();
+          const containerRect = barsContainer.getBoundingClientRect();
+          
+          tooltip.style.left = `${rect.left - containerRect.left + (rect.width / 2) - (tooltipRect.width / 2)}px`;
+          tooltip.style.top = `${rect.top - containerRect.top - tooltipRect.height - 8}px`;
+        });
+        
+        bar.addEventListener('mouseleave', () => {
+          tooltip.style.display = 'none';
+        });
+      }
+      
       barsContainer.appendChild(bar);
     });
     
@@ -215,7 +261,7 @@ class HistoryCard extends HTMLElement {
     });
     
     // Update chart or defrost timeline
-    if (this._config.sensor === 'defrost') {
+    if (this._config.sensor === 'defrost' || this._config.sensor === 'aux_heating') {
       this.updateDefrostOnly();
     } else {
       this.updateChart();
@@ -237,7 +283,7 @@ class HistoryCard extends HTMLElement {
             <button class="time-span-btn active" data-hours="24" style="padding: 4px 12px; border: 1px solid #2b7bd3; background: #2b7bd3; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">24h</button>
           </div>
           ${isDefrostOnly ? `
-          <div class="history-card__defrost-timeline" id="defrost-timeline-${this._config.sensor}" style="padding: 40px 16px;">
+          <div class="history-card__defrost-timeline" id="defrost-timeline-${this._config.sensor}" style="padding: 40px 16px; position: relative;">
             <div style="font-size: 13px; color: #666; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
               <span>${this._config.sensor === 'aux_heating' ? 'Aux heating periods:' : 'Defrost periods:'}</span>
               <div style="display: flex; gap: 8px; align-items: center;">
@@ -246,13 +292,14 @@ class HistoryCard extends HTMLElement {
               </div>
             </div>
             <div id="defrost-bars-${this._config.sensor}" style="height: 48px; background: #f5f5f5; border-radius: 4px; position: relative; overflow: hidden;"></div>
+            <div id="bar-tooltip-${this._config.sensor}" style="position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; pointer-events: none; display: none; white-space: nowrap; z-index: 1000;"></div>
           </div>
           ` : `
           <div class="history-card__chart" style="height: 300px; padding: 16px;">
             <canvas id="history-chart-${this._config.sensor}"></canvas>
           </div>
           ${showDefrostTimeline ? `
-          <div class="history-card__defrost-timeline" id="defrost-timeline-${this._config.sensor}" style="padding: 8px 16px; border-top: 1px solid rgba(0,0,0,0.1);">
+          <div class="history-card__defrost-timeline" id="defrost-timeline-${this._config.sensor}" style="padding: 8px 16px; border-top: 1px solid rgba(0,0,0,0.1); position: relative;">
             <div style="font-size: 11px; color: #666; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;">
               <span>Defrost periods:</span>
               <div style="display: flex; gap: 8px; align-items: center;">
@@ -263,6 +310,7 @@ class HistoryCard extends HTMLElement {
             <div style="padding-left: 60px; padding-right: 12px;">
               <div id="defrost-bars-${this._config.sensor}" style="height: 24px; background: #f5f5f5; border-radius: 4px; position: relative; overflow: hidden;"></div>
             </div>
+            <div id="bar-tooltip-${this._config.sensor}" style="position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; pointer-events: none; display: none; white-space: nowrap; z-index: 1000;"></div>
           </div>
           ` : ''}
           `}

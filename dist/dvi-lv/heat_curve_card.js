@@ -336,15 +336,17 @@ class HeatCurveCard extends HTMLElement {
 			if (isSidecar) {
 				const modalContent = modalBody.closest('.modal-content');
 				if (modalContent) {
-					// haCard width is calculatedWidth + 20 (chart right padding) + modal-body padding
-					const modalWidth = calculatedWidth + 20 + 16;
-					modalContent.style.width = `${modalWidth}px`;
+					// haCard width is calculatedWidth + 20 (chart right padding) + modal-body padding (16*2)
+					const preferredModalWidth = calculatedWidth + 20 + 32;
+					// Don't set explicit width, use min/max to constrain while allowing fit-content
+					modalContent.style.minWidth = `${Math.min(preferredModalWidth, window.innerWidth * 0.9)}px`;
 					modalContent.style.maxWidth = '90vw';
+					modalContent.style.width = 'fit-content';
 					modalContent.style.overflowX = 'hidden';
 				}
-				// Use minimal modal-body padding for breathing room
-				modalBody.style.paddingLeft = '8px';
-				modalBody.style.paddingRight = '8px';
+				// Reset to default modal-body padding
+				modalBody.style.paddingLeft = '';
+				modalBody.style.paddingRight = '';
 			}
 			
 			// For HA: Try to resize browser-mod popup

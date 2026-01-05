@@ -6,6 +6,34 @@ class HistoryCard extends HTMLElement {
     this._chart = null; // Store chart instance
   }
   
+  connectedCallback() {
+    // Reset modal sizing when history card is opened
+    // This prevents inheriting fixed widths from heat curve popup
+    const modalBody = this.closest('.modal-body');
+    if (modalBody) {
+      const modalContent = modalBody.closest('.modal-content');
+      if (modalContent) {
+        // Reset to CSS defaults for history cards, but constrain width
+        modalContent.style.width = 'fit-content';
+        modalContent.style.minWidth = '400px';
+        modalContent.style.maxWidth = '550px';
+      }
+      // Reset modal-body padding
+      modalBody.style.paddingLeft = '';
+      modalBody.style.paddingRight = '';
+    }
+    
+    // Set width constraints on ha-card to prevent Chart.js from expanding it
+    setTimeout(() => {
+      const haCard = this.querySelector('ha-card');
+      if (haCard) {
+        haCard.style.width = '500px';
+        haCard.style.maxWidth = '500px';
+        haCard.style.minWidth = '400px';
+      }
+    }, 0);
+  }
+  
   formatDuration(seconds) {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -295,7 +323,7 @@ class HistoryCard extends HTMLElement {
             <div id="bar-tooltip-${this._config.sensor}" style="position: absolute; background: rgba(0,0,0,0.85); color: white; padding: 8px 12px; border-radius: 4px; font-size: 12px; pointer-events: none; display: none; white-space: nowrap; z-index: 1000;"></div>
           </div>
           ` : `
-          <div class="history-card__chart" style="height: 300px; padding: 16px;">
+          <div class="history-card__chart" style="height: 300px; padding: 16px; width: 500px; max-width: 500px;">
             <canvas id="history-chart-${this._config.sensor}"></canvas>
           </div>
           ${showDefrostTimeline ? `
@@ -390,7 +418,7 @@ class HistoryCard extends HTMLElement {
           borderColor: '#2b7bd3',
           backgroundColor: 'rgba(43, 123, 211, 0.08)',
           fill: true,
-          borderWidth: 2,
+          borderWidth: 1.5,
           tension: 0.28,
           pointRadius: 0,
           pointHoverRadius: 4,
@@ -457,7 +485,7 @@ class HistoryCard extends HTMLElement {
               color: 'rgba(0,0,0,0.04)' 
             },
             ticks: { 
-              callback: (v) => `${v}°C`,
+              callback: (v) => `${typeof v === 'number' ? v.toFixed(1) : v}°C`,
               color: '#444'
             }
           }

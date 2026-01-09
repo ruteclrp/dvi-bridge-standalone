@@ -1118,10 +1118,12 @@ while True:
             label = active_fc04[key]
             last_inputs[label] = round(raw * 0.1, 1)
 
-        # EM23 power (FC04)
-        power = read_input(0x24)
-        if power is not None:
-            last_inputs["em23_power"] = round(power * 0.0001, 4)
+        # EM23 power (FC04) - 32-bit value from MSW (0x23) and LSW (0x24)
+        msw = read_input(0x23)
+        lsw = read_input(0x24)
+        if msw is not None and lsw is not None:
+            raw_power = (msw << 16) + lsw
+            last_inputs["em23_power"] = round(raw_power * 0.0001, 3)
 
         last_fc04_update = now
 

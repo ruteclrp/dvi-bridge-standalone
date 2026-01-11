@@ -1,4 +1,3 @@
-
 name: Build & Release DVI Bridge + Sidecar + HACS
 
 on:
@@ -95,7 +94,27 @@ jobs:
           tar czf release/bridge-runtime.tar.gz -C release bridge-runtime
 
       # -----------------------------
-      # 6. Publish GitHub Release
+      # 6. Build Installation Scripts Package
+      # -----------------------------
+      - name: Build Installation Scripts Package
+        run: |
+          mkdir -p release/dvi-installation-${{ steps.version.outputs.version }}
+          
+          # Copy installation scripts
+          cp -r script release/dvi-installation-${{ steps.version.outputs.version }}/
+          
+          # Copy documentation
+          cp README.md release/dvi-installation-${{ steps.version.outputs.version }}/
+          cp LICENSE release/dvi-installation-${{ steps.version.outputs.version }}/ || true
+          
+          # Package it
+          tar czf release/dvi-installation-${{ steps.version.outputs.version }}.tar.gz -C release dvi-installation-${{ steps.version.outputs.version }}
+          
+          echo "== installation package =="
+          find release/dvi-installation-${{ steps.version.outputs.version }} -type f -print
+
+      # -----------------------------
+      # 7. Publish GitHub Release
       # -----------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -107,3 +126,4 @@ jobs:
           files: |
             dist/**
             release/bridge-runtime.tar.gz
+            release/dvi-installation-${{ steps.version.outputs.version }}.tar.gz

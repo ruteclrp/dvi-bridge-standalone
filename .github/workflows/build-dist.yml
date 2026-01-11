@@ -1,6 +1,12 @@
 name: Build dist
 
 on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+on:
   push:
     branches: [ "main" ]
     paths:

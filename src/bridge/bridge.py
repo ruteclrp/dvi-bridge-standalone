@@ -632,8 +632,8 @@ fc06_registers = {
     0xD0: "curve_temp",
     0x1A: "central_heating_config",
     0x1B: "cv_max",
-    0x1C: "cv_min",
-    0x8D: "outdoor_cal"
+    0x1C: "cv_min"
+#    0x8D: "outdoor_cal"
 }
 
 # Special FC06 sensor definitions
@@ -1151,8 +1151,8 @@ while True:
             0xD0: "curve_temp",
             0x1A: "central_heating_config",
             0x1B: "cv_max",
-            0x1C: "cv_min",
-            0x8D: "outdoor_cal"
+            0x1C: "cv_min"
+#            0x8D: "outdoor_cal"
         }
 
         # Define adjustments: reg -> (multiplier, decimals)

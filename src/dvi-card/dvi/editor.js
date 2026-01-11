@@ -1,4 +1,4 @@
-export class LvHeatpumpCardEditor extends HTMLElement {
+export class DviHeatpumpCardEditor extends HTMLElement {
 	constructor() {
 		super();
 		this._config = {};
@@ -240,6 +240,6 @@ export class LvHeatpumpCardEditor extends HTMLElement {
 	}
 }
 
-if (!customElements.get("lv-heatpump-card-editor")) {
-	customElements.define("lv-heatpump-card-editor", LvHeatpumpCardEditor);
+if (!customElements.get("dvi-heatpump-card-editor")) {
+	customElements.define("dvi-heatpump-card-editor", DviHeatpumpCardEditor);
 }

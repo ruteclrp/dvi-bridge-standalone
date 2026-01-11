@@ -1,13 +1,13 @@
-import "../dvi-card/dvi-lv-heatpump-card.js";
-import "../dvi-card/dvi-lv/heat_curve_card.js";
-import "../dvi-card/dvi-lv/history_card.js";
+import "../dvi-card/dvi-heatpump-card.js";
+import "../dvi-card/dvi/heat_curve_card.js";
+import "../dvi-card/dvi/history_card.js";
 import { HassAdapter } from "../hass-adapter.js";
 
 window.addEventListener("DOMContentLoaded", async () => {
   const hass = new HassAdapter();
   await hass.refresh();
 
-  const card = document.createElement("lv-heatpump-card");
+  const card = document.createElement("dvi-heatpump-card");
   card.setConfig({
     outdoor_temp: "sensor.outdoor_temp",
     curve_temp: "sensor.curve_temp",

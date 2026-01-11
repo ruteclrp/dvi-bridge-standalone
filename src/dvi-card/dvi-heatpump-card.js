@@ -1,10 +1,10 @@
-import { HEAT_CURVE_DEFAULTS } from "./dvi-lv/heat_curve_card.js";
-import { buildDiagramView } from "./dvi-lv/diagram.js";
-import { bindHistoryHooks, bindIconHooks } from "./dvi-lv/history-hooks.js";
-import { wireModeChips } from "./dvi-lv/mode-chips.js";
-import "./dvi-lv/editor.js";
+import { HEAT_CURVE_DEFAULTS } from "./dvi/heat_curve_card.js";
+import { buildDiagramView } from "./dvi/diagram.js";
+import { bindHistoryHooks, bindIconHooks } from "./dvi/history-hooks.js";
+import { wireModeChips } from "./dvi/mode-chips.js";
+import "./dvi/editor.js";
 
-class LvHeatpumpCard extends HTMLElement {
+class DviHeatpumpCard extends HTMLElement {
 	constructor() {
 		super();
 		this._heatCurveConfigKey = "";
@@ -42,7 +42,7 @@ class LvHeatpumpCard extends HTMLElement {
 	}
 
 	static get imageBase() {
-		return new URL("./dvi-lv/", import.meta.url).href;
+		return new URL("./dvi/", import.meta.url).href;
 	}
 
 	_updateHeader() {
@@ -60,7 +60,7 @@ class LvHeatpumpCard extends HTMLElement {
 		}
 		this._config = config;
 		this._root = this.attachShadow({ mode: "open" });
-		const styleUrl = new URL("./dvi-lv/heatpump-card.css", import.meta.url).href;
+		const styleUrl = new URL("./dvi/heatpump-card.css", import.meta.url).href;
 		this._root.innerHTML = `
       <style>@import url("${styleUrl}");</style>
       <ha-card>
@@ -94,7 +94,7 @@ class LvHeatpumpCard extends HTMLElement {
 		const view = buildDiagramView({
 			hass: this._hass,
 			config: this._config,
-			imageBase: LvHeatpumpCard.imageBase,
+			imageBase: DviHeatpumpCard.imageBase,
 			pumpType: this._pumpType,
 		});
 
@@ -143,7 +143,7 @@ class LvHeatpumpCard extends HTMLElement {
 	}
 
 	static getConfigElement() {
-		return document.createElement("lv-heatpump-card-editor");
+		return document.createElement("dvi-heatpump-card-editor");
 	}
 
 	static getStubConfig() {
@@ -153,13 +153,13 @@ class LvHeatpumpCard extends HTMLElement {
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-	type: "lv-heatpump-card",
-	name: "DVI LV Heatpump Card",
-	description: "Visual overview and control panel for a DVI LV heatpump.",
+	type: "dvi-heatpump-card",
+	name: "DVI Heatpump Card",
+	description: "Visual overview and control panel for a DVI heatpump.",
 	preview: true,
 	documentationURL: "https://github.com/ruteclrp/dvi-bridge-standalone",
 });
 
-if (!customElements.get("lv-heatpump-card")) {
-	customElements.define("lv-heatpump-card", LvHeatpumpCard);
+if (!customElements.get("dvi-heatpump-card")) {
+	customElements.define("dvi-heatpump-card", DviHeatpumpCard);
 }

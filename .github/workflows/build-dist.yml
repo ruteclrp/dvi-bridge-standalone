@@ -1,50 +1,109 @@
-name: Build dist
+
+name: Build & Release DVI Bridge + Sidecar + HACS
 
 on:
-  workflow_dispatch:
   push:
     tags:
       - "v*"
-
-on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - "sidecar/**"
-      - ".github/workflows/build-dist.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build-dist:
+  build-release:
     runs-on: ubuntu-latest
 
     steps:
+      # -----------------------------
+      # 1. Checkout
+      # -----------------------------
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Prepare dist folder
+      # -----------------------------
+      # 2. Extract version from tag
+      # -----------------------------
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # -----------------------------
+      # 3. Build HACS dist from src/dvi-card
+      # -----------------------------
+      - name: Build HACS dist
         run: |
           rm -rf dist
-          mkdir -p dist/dvi-lv
-          cp sidecar/www/dvi-card/dvi-lv-heatpump-card.js dist/
-          cp -r sidecar/www/dvi-card/dvi-lv/* dist/dvi-lv/
+          mkdir -p dist/dvi-card
+
+          cp src/dvi-card/dvi-heatpump-card.js dist/
+          cp -r src/dvi-card/dvi dist/dvi-card/
+
           echo "== dist =="
           find dist -maxdepth 3 -type f -print
 
-      - name: Commit dist back to repo
+      # -----------------------------
+      # 4. Build Sidecar UI from src/dvi-card
+      # -----------------------------
+      - name: Build Sidecar UI
         run: |
-          # Hvis dist ikke har ændret sig, så stop pænt
-          git add dist
-          git diff --cached --quiet && echo "No dist changes" && exit 0
+          rm -rf sidecar
+          mkdir -p sidecar/www/dvi-card
 
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Copy existing sidecar www content
+          cp -r src/sidecar/www/* sidecar/www/
 
-          # Brug [skip ci] for at undgå at andre workflows trigges unødigt
-          git commit -m "chore: build dist [skip ci]"
-          git push
+          # Add the card files
+          cp src/dvi-card/dvi-heatpump-card.js sidecar/www/
+          cp -r src/dvi-card/dvi sidecar/www/dvi-card/
+
+          echo "== sidecar =="
+          find sidecar -maxdepth 4 -type f -print
+
+      # -----------------------------
+      # 5. Build Bridge Runtime Bundle (RPi)
+      # -----------------------------
+      - name: Build Bridge Runtime Bundle
+        run: |
+          rm -rf release
+          mkdir -p release/bridge-runtime
+
+          # Core bridge files
+          cp src/bridge/bridge.py release/bridge-runtime/
+          cp src/bridge/read_static_values_modbustk.py release/bridge-runtime/
+
+          # Sidecar runtime (generated + Python files)
+          cp -r sidecar release/bridge-runtime/
+          cp src/sidecar/webbridge.py release/bridge-runtime/sidecar/
+          cp src/sidecar/entity_map.py release/bridge-runtime/sidecar/
+
+          # Version file
+          echo "${{ steps.version.outputs.version }}" > release/bridge-runtime/VERSION
+
+          # Merge requirements from both bridge and sidecar
+          cat src/bridge/requirements.txt > release/bridge-runtime/requirements.txt
+          cat src/sidecar/requirements.txt >> release/bridge-runtime/requirements.txt
+
+          # systemd service files
+          cp -r src/systemd release/bridge-runtime/
+
+          # Package it
+          tar czf release/bridge-runtime.tar.gz -C release bridge-runtime
+
+      # -----------------------------
+      # 6. Publish GitHub Release
+      # -----------------------------
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: "Release ${{ steps.version.outputs.version }}"
+          draft: false
+          prerelease: false
+          files: |
+            dist/**
+            release/bridge-runtime.tar.gz

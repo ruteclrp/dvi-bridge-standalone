@@ -265,6 +265,16 @@ ENTITY_MAP = {
     },
     "mapping": {0: "Off", 1: "Automatic", 2: "Backup operation"}
   },
+  "select.heatpump_state": {
+    "source": ("write_registers", "heatpump_state"),
+    "domain": "select",
+    "command_topic": "dvi/command/heatpumpstate",
+    "attributes": {
+      "options": ["Stand by", "On"],
+      "friendly_name": "Heatpump state"
+    },
+    "mapping": {2: "Stand by", 4: "On"}
+  },
   "select.central_heating_config": {
     "source": ("write_registers", "central_heating_config"),
     "domain": "select",

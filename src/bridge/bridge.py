@@ -438,6 +438,7 @@ command_map = {
     "dvi/command/vvsetpoint": {"register": 0x10B, "scale": 1},
     "dvi/command/vvschedule": {"register": 0x10C, "scale": 1},
     "dvi/command/tvstate": {"register": 0x10F, "scale": 1},
+    "dvi/command/heatpumpstate": {"register": 0x19C, "scale": 1},
     "dvi/command/centralheatingconfig": {"register": 0x11A, "scale": 1},
     "dvi/command/cvmax": {"register": 0x11B, "scale": 1},
     "dvi/command/cvmin": {"register": 0x11C, "scale": 1},
@@ -453,6 +454,7 @@ select_map = {
     "dvi/command/cvnight": {"Timer": 0, "Constant day": 1, "Constant night": 2},
     "dvi/command/vvschedule": {"Timer": 0, "Constant on": 1, "Constant off": 2},
     "dvi/command/tvstate": {"Off": 0, "Automatic": 1, "Backup operation": 2},
+    "dvi/command/heatpumpstate": {"Stand by": 2, "On": 4},
     "dvi/command/centralheatingconfig": {"Under floor heating w/o shunt": 0,
                                            "Under floor heating w. shunt": 1,
                                            "Radiator and mixed systems": 2}
@@ -626,6 +628,7 @@ fc06_registers = {
     0x0B: "vv_setpoint",
     0x0C: "vv_schedule",
     0x0F: "aux_heating",
+    0x9C: "heatpump_state",
     0xA1: "comp_hours",
     0xA2: "vv_hours",
     0xA3: "heating_hours",
@@ -662,6 +665,7 @@ mode_options = {
     "vv_mode": ["Off", "On", "Timer"],
     "vv_schedule": ["Timer", "Constant on", "Constant off"],
     "aux_heating": ["Off", "Automatic", "Backup operation"],
+    "heatpump_state": ["Stand by", "On"],
     "central_heating_config": ["Under floor heating w/o shunt",
                                "Under floor heating w. shunt",
                                "Radiator and mixed systems"]
@@ -762,6 +766,7 @@ def publish_all_discovery() -> None:
                     "vv_mode": "dvi/command/vvstate",
                     "vv_schedule": "dvi/command/vvschedule",
                     "aux_heating": "dvi/command/tvstate",
+                    "heatpump_state": "dvi/command/heatpumpstate",
                     "central_heating_config": "dvi/command/centralheatingconfig"
                 }[label]
 
@@ -771,6 +776,7 @@ def publish_all_discovery() -> None:
                     "vv_mode": {0: "Off", 1: "On", 2: "Timer"},
                     "vv_schedule": {0: "Timer", 1: "Constant on", 2: "Constant off"},
                     "aux_heating": {0: "Off", 1: "Automatic", 2: "Backup operation"},
+                    "heatpump_state": {2: "Stand by", 4: "On"},
                     "central_heating_config": {
                         0: "Under floor heating w/o shunt",
                         1: "Under floor heating w. shunt",

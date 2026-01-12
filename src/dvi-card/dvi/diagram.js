@@ -11,6 +11,7 @@ const VV_SCHEDULE_ICONS = {
 };
 
 const CHIP_TITLES = {
+	heatpump: "Varmepumpe",
 	info: "Information",
 	cv: "Centralvarme",
 	vv: "Varmtvandstemperatur",
@@ -108,6 +109,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const cvNight = config.cv_night ? getState(config.cv_night) : null;
 	const vvSchedule = config.vv_schedule ? getState(config.vv_schedule) : null;
 	const auxHeating = config.aux_heating ? getState(config.aux_heating) : null;
+	const heatpumpState = config.heatpump_state ? getState(config.heatpump_state) : null;
 
 	// heating element sensor used when aux select = "Automatic"
 	const heatingElementState = getStateByName("Heating element");
@@ -197,6 +199,8 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const cvActive = isModeActive(cvMode);
 	const vvActive = isModeActive(vvMode, vvSchedule);
 	const auxActive = isModeActive(auxHeating);
+	const heatpumpActive = heatpumpState && heatpumpState.toLowerCase() === "on";
+	const heatpumpStandby = heatpumpState && heatpumpState.toLowerCase() === "stand by";
 
 	const cvIconColor = cvActive
 			? "var(--state-climate-heat-color, var(--accent-color))"
@@ -218,6 +222,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const cvEntities = Array.isArray(config.cv_entities) ? config.cv_entities : [];
 	const vvEntities = Array.isArray(config.vv_entities) ? config.vv_entities : [];
 	const auxEntities = Array.isArray(config.aux_entities) ? config.aux_entities : [];
+	const heatpumpEntities = config.heatpump_state ? [config.heatpump_state] : [];
 
 	const iconEntityMap = {
 		defrost: config.defrost_icon,
@@ -240,9 +245,10 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
   `;
 
 	const infoChipClasses = "mode-chip popup-chip mode-chip--info mode-chip--active";
-	const cvChipClasses = `mode-chip popup-chip ${chipStateClass(cvActive)}`;
-	const vvChipClasses = `mode-chip popup-chip ${chipStateClass(vvActive)}`;
-	const auxChipClasses = `mode-chip popup-chip ${chipStateClass(auxActive)}`;
+	const cvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(cvActive)}`;
+	const vvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(vvActive)}`;
+	const auxChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(auxActive)}`;
+	const heatpumpChipClasses = `mode-chip popup-chip ${chipStateClass(heatpumpActive)}`;
 
 	const html = `
     <img src="${imageBase}/${baseDiagram}" class="diagram-base" alt="${pumpType || 'AW'} diagram" />
@@ -361,6 +367,15 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 
     <div class="mode-bar">
       ${
+				heatpumpEntities.length
+					? `<div class="${heatpumpChipClasses}" data-popup="heatpump">
+               <ha-icon icon="mdi:heat-pump${heatpumpActive ? '' : '-outline'}" style="color:${heatpumpActive ? 'var(--success-color, #4caf50)' : 'var(--disabled-text-color)'};"></ha-icon>
+               <span class="chip-label">HP</span>
+             </div>`
+					: ""
+			}
+
+      ${
 				infoEntities.length
 					? `<div class="${infoChipClasses}" data-popup="info">
                <ha-icon icon="mdi:information-slab-circle"></ha-icon>
@@ -415,6 +430,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 		stateEntityMap,
 		iconEntityMap,
 		chipGroups: {
+			heatpump: { title: CHIP_TITLES.heatpump, entities: heatpumpEntities },
 			info: { title: CHIP_TITLES.info, entities: infoEntities },
 			cv: { title: CHIP_TITLES.cv, entities: cvEntities },
 			vv: { title: CHIP_TITLES.vv, entities: vvEntities },

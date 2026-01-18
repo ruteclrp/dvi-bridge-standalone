@@ -136,7 +136,7 @@ jobs:
           EOF
 
           # Package it
-          tar czf release/dvi-bridge-basic-${{ steps.version.outputs.version }}.tar.gz -C release bridge-basic
+          tar czf release/dvi-bridge-basic-${{ steps.version.outputs.version }}.rpi.tar.gz -C release bridge-basic
 
           echo "== Bridge Basic package =="
           find release/bridge-basic -type f -print
@@ -184,7 +184,7 @@ jobs:
           EOF
 
           # Package it
-          tar czf release/dvi-sidecar-${{ steps.version.outputs.version }}.tar.gz -C release sidecar-package
+          tar czf release/dvi-sidecar-${{ steps.version.outputs.version }}.rpi.tar.gz -C release sidecar-package
 
           echo "== Sidecar package =="
           find release/sidecar-package -type f -print
@@ -220,7 +220,7 @@ jobs:
           cp -r src/systemd release/complete-runtime/
 
           # Package it
-          tar czf release/dvi-complete-runtime-${{ steps.version.outputs.version }}.tar.gz -C release complete-runtime
+          tar czf release/dvi-complete-runtime-${{ steps.version.outputs.version }}.rpi.tar.gz -C release complete-runtime
 
           echo "== Complete runtime package =="
           find release/complete-runtime -type f -print
@@ -240,13 +240,13 @@ jobs:
           cp LICENSE release/installation-scripts/ || true
           
           # Package it
-          tar czf release/dvi-installation-scripts-${{ steps.version.outputs.version }}.tar.gz -C release installation-scripts
+          tar czf release/dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz -C release installation-scripts
           
           echo "== Installation scripts package =="
           find release/installation-scripts -type f -print
 
       # -----------------------------
-      # 8. Publish GitHub Release (RPi packages only, NO assets for HACS)
+      # 8. Publish GitHub Release with RPi packages
       # -----------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -256,38 +256,32 @@ jobs:
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, 'pre') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
           body: |
-            ## Installation Packages
+            ## Installation Instructions
             
             ### For Home Assistant (HACS)
-            - **Important:** Do NOT download packages from this release page for HACS
-            - HACS automatically fetches the card from the `dist/` folder in the repository
-            - In HACS: Add as custom repository → Category: Dashboard → Track branch: ${{ steps.version.outputs.branch }}
-            - Let HACS download directly from the repository, not from release assets
+            The HACS card is distributed via the repository's `dist/` folder.
+            Simply add this repository in HACS (Category: Dashboard) and it will work automatically.
             
             ### For Raspberry Pi Bridge
             Download the appropriate package(s) below:
             
             **Option 1: Basic Bridge Only**
-            - Download: `dvi-bridge-basic-${{ steps.version.outputs.version }}.tar.gz`
-            - Provides MQTT bridge to Home Assistant
-            - Minimal installation, no web interface
+            - Download: `dvi-bridge-basic-${{ steps.version.outputs.version }}.rpi.tar.gz`
+            - Minimal installation, MQTT bridge only
             
-            **Option 2: Bridge + Sidecar Web Interface**
-            - Download both:
-              - `dvi-bridge-basic-${{ steps.version.outputs.version }}.tar.gz`
-              - `dvi-sidecar-${{ steps.version.outputs.version }}.tar.gz`
-            - Provides MQTT bridge + standalone web interface
+            **Option 2: Sidecar Web Interface**
+            - Download: `dvi-sidecar-${{ steps.version.outputs.version }}.rpi.tar.gz`
+            - Standalone web interface (requires bridge running separately)
             
             **Option 3: Complete All-in-One**
-            - Download: `dvi-complete-runtime-${{ steps.version.outputs.version }}.tar.gz`
-            - Contains everything (bridge + sidecar)
-            - Legacy option, use Option 1 or 2 for modular updates
+            - Download: `dvi-complete-runtime-${{ steps.version.outputs.version }}.rpi.tar.gz`
+            - Everything included (bridge + sidecar)
             
-            ### Installation Scripts
-            - Download: `dvi-installation-scripts-${{ steps.version.outputs.version }}.tar.gz`
-            - Contains install.sh and update.sh scripts
+            **Installation Scripts**
+            - Download: `dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz`
+            - Contains install.sh and update.sh
           files: |
-            release/dvi-bridge-basic-${{ steps.version.outputs.version }}.tar.gz
-            release/dvi-sidecar-${{ steps.version.outputs.version }}.tar.gz
-            release/dvi-complete-runtime-${{ steps.version.outputs.version }}.tar.gz
-            release/dvi-installation-scripts-${{ steps.version.outputs.version }}.tar.gz
+            release/dvi-bridge-basic-${{ steps.version.outputs.version }}.rpi.tar.gz
+            release/dvi-sidecar-${{ steps.version.outputs.version }}.rpi.tar.gz
+            release/dvi-complete-runtime-${{ steps.version.outputs.version }}.rpi.tar.gz
+            release/dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz

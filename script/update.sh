@@ -49,8 +49,8 @@ cd /tmp
 # Update bridge if installed
 if [ "$HAS_BRIDGE" = true ]; then
   echo "Downloading bridge update..."
-  BRIDGE_TAR="dvi-bridge-basic-$LATEST.tar.gz"
-  URL="https://github.com/$REPO/releases/download/$LATEST/$BRIDGE_TAR"
+  BRIDGE_TAR="dvi-bridge-basic-$LATEST.rpi.tar.gz"
+  URL="https://raw.githubusercontent.com/$REPO/main/bridge_assets/$LATEST/$BRIDGE_TAR"
   wget -q "$URL" -O "$BRIDGE_TAR"
   tar xzf "$BRIDGE_TAR" -C "$RELEASE_DIR" --strip-components=1
   echo "✓ Bridge updated"
@@ -59,8 +59,8 @@ fi
 # Update sidecar if installed
 if [ "$HAS_SIDECAR" = true ]; then
   echo "Downloading sidecar update..."
-  SIDECAR_TAR="dvi-sidecar-$LATEST.tar.gz"
-  URL="https://github.com/$REPO/releases/download/$LATEST/$SIDECAR_TAR"
+  SIDECAR_TAR="dvi-sidecar-$LATEST.rpi.tar.gz"
+  URL="https://raw.githubusercontent.com/$REPO/main/bridge_assets/$LATEST/$SIDECAR_TAR"
   wget -q "$URL" -O "$SIDECAR_TAR"
   tar xzf "$SIDECAR_TAR" -C "$RELEASE_DIR" --strip-components=1
   echo "✓ Sidecar updated"

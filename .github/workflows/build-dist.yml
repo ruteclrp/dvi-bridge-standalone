@@ -73,6 +73,7 @@ jobs:
           cp src/dvi-card/dvi-heatpump-card.js dist/
           cp -r src/dvi-card/dvi dist/
           
+          # Update VERSION file in dist/
           echo "${{ steps.version.outputs.version }}" > dist/VERSION
           
           echo "== Contents of newly built dist =="

@@ -43,20 +43,8 @@ jobs:
       # -----------------------------
       - name: Build HACS Card Package
         run: |
-          rm -rf dist
-          mkdir -p dist
-
-          # Copy card structure exactly as-is from src
-          cp src/dvi-card/dvi-heatpump-card.js dist/
-          cp -r src/dvi-card/dvi dist/
-          
-          echo "${{ steps.version.outputs.version }}" > dist/VERSION
-
-          echo "== HACS dist package structure =="
-          tree dist/ || find dist -type f -print
-          
-          echo "== Verifying dvi folder exists =="
-          ls -la dist/dvi/ || echo "ERROR: dvi folder not found!"
+          echo "Building dist/ package..."
+          echo "Version: ${{ steps.version.outputs.version }}"
 
       - name: Commit dist folder to repository
         run: |
@@ -77,8 +65,15 @@ jobs:
           # Ensure ONLY dist folder exists (no release artifacts)
           rm -rf release/ sidecar/ *.tar.gz
           
-          # Copy the newly built dist folder
-          # (it was built in the detached HEAD state, we need it in the branch)
+          # NOW build dist/ on the branch
+          rm -rf dist
+          mkdir -p dist
+          
+          # Copy card structure exactly as-is from src
+          cp src/dvi-card/dvi-heatpump-card.js dist/
+          cp -r src/dvi-card/dvi dist/
+          
+          echo "${{ steps.version.outputs.version }}" > dist/VERSION
           
           echo "== Contents of newly built dist =="
           ls -la dist/
@@ -251,7 +246,7 @@ jobs:
           find release/installation-scripts -type f -print
 
       # -----------------------------
-      # 8. Publish GitHub Release
+      # 8. Publish GitHub Release (RPi packages only, NO assets for HACS)
       # -----------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -264,11 +259,13 @@ jobs:
             ## Installation Packages
             
             ### For Home Assistant (HACS)
-            - HACS will automatically fetch the card from the `dist/` folder on branch: ${{ steps.version.outputs.branch }}
-            - No manual download needed if using HACS
+            - **Important:** Do NOT download packages from this release page for HACS
+            - HACS automatically fetches the card from the `dist/` folder in the repository
+            - In HACS: Add as custom repository → Category: Dashboard → Track branch: ${{ steps.version.outputs.branch }}
+            - Let HACS download directly from the repository, not from release assets
             
             ### For Raspberry Pi Bridge
-            Choose one of these options:
+            Download the appropriate package(s) below:
             
             **Option 1: Basic Bridge Only**
             - Download: `dvi-bridge-basic-${{ steps.version.outputs.version }}.tar.gz`

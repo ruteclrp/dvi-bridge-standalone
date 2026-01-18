@@ -208,10 +208,10 @@ ha-card {
 .mode-bar.mode-bar--bottom {
 	top: auto;
 	bottom: 4%;
-	left: 50%;
+	left: 17%;
 	right: auto;
-	transform: translateX(-50%);
-	justify-content: center;
+	transform: none;
+	justify-content: flex-start;
 	z-index: 5;
 	padding: 0 8px;
 }

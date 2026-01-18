@@ -27,8 +27,8 @@ cd /tmp
 case "$MODE" in
   basic)
     echo "== Installing Bridge Basic (MQTT only) =="
-    TARBALL="dvi-bridge-basic-$VERSION.tar.gz"
-    URL="https://github.com/$REPO/releases/download/$VERSION/$TARBALL"
+    TARBALL="dvi-bridge-basic-$VERSION.rpi.tar.gz"
+    URL="https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$TARBALL"
     wget -q "$URL" -O "$TARBALL"
     mkdir -p "$RELEASE_DIR"
     tar xzf "$TARBALL" -C "$RELEASE_DIR" --strip-components=1
@@ -39,14 +39,14 @@ case "$MODE" in
   sidecar)
     echo "== Installing Bridge + Sidecar Web Interface =="
     # Download bridge basic
-    BRIDGE_TAR="dvi-bridge-basic-$VERSION.tar.gz"
-    wget -q "https://github.com/$REPO/releases/download/$VERSION/$BRIDGE_TAR" -O "$BRIDGE_TAR"
+    BRIDGE_TAR="dvi-bridge-basic-$VERSION.rpi.tar.gz"
+    wget -q "https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$BRIDGE_TAR" -O "$BRIDGE_TAR"
     mkdir -p "$RELEASE_DIR"
     tar xzf "$BRIDGE_TAR" -C "$RELEASE_DIR" --strip-components=1
     
     # Download sidecar
-    SIDECAR_TAR="dvi-sidecar-$VERSION.tar.gz"
-    wget -q "https://github.com/$REPO/releases/download/$VERSION/$SIDECAR_TAR" -O "$SIDECAR_TAR"
+    SIDECAR_TAR="dvi-sidecar-$VERSION.rpi.tar.gz"
+    wget -q "https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$SIDECAR_TAR" -O "$SIDECAR_TAR"
     tar xzf "$SIDECAR_TAR" -C "$RELEASE_DIR" --strip-components=1
     INSTALL_BRIDGE=true
     INSTALL_SIDECAR=true
@@ -54,8 +54,8 @@ case "$MODE" in
   
   complete)
     echo "== Installing Complete Runtime (All components) =="
-    TARBALL="dvi-complete-runtime-$VERSION.tar.gz"
-    URL="https://github.com/$REPO/releases/download/$VERSION/$TARBALL"
+    TARBALL="dvi-complete-runtime-$VERSION.rpi.tar.gz"
+    URL="https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$TARBALL"
     wget -q "$URL" -O "$TARBALL"
     mkdir -p "$RELEASE_DIR"
     tar xzf "$TARBALL" -C "$RELEASE_DIR" --strip-components=1

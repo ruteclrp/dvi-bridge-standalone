@@ -26,9 +26,13 @@ share/python-wheels/
 *.egg
 MANIFEST
 
-# Release packages (workflow artifacts only)
+# Release temp folder (workflow build directory only)
 release/
-*.tar.gz
+
+# Allow bridge_assets/ to be committed
+# !bridge_assets/
+
+# Exclude local sidecar folder
 sidecar/
 
 # PyInstaller

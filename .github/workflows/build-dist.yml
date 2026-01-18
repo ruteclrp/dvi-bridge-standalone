@@ -71,27 +71,32 @@ jobs:
           git fetch origin $BRANCH
           git checkout $BRANCH
           
+          # COMPLETELY REMOVE old dist folder from repository
+          git rm -rf dist/ || true
+          
           # Ensure ONLY dist folder exists (no release artifacts)
           rm -rf release/ sidecar/ *.tar.gz
           
-          echo "== Contents before git add =="
+          # Copy the newly built dist folder
+          # (it was built in the detached HEAD state, we need it in the branch)
+          
+          echo "== Contents of newly built dist =="
           ls -la dist/
           echo "== dvi folder contents =="
           ls -la dist/dvi/ || echo "ERROR: dvi folder missing!"
           
           # Force add all files in dist recursively
           git add -f dist/
-          git add -f dist/dvi/
           
           echo "== Git status after add =="
           git status
           
           # Commit if there are changes
-          if ! git diff --staged --quiet; then
+          if ! git diff --staged --quiet || ! git diff --quiet; then
             git commit -m "Build dist for ${{ steps.version.outputs.version }}"
             
-            echo "== Files being pushed =="
-            git show --name-only --pretty="" HEAD
+            echo "== Files in commit =="
+            git diff --name-only HEAD~1 HEAD
             
             git push origin $BRANCH
           else

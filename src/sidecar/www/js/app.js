@@ -28,6 +28,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     cv_night: "select.cv_night",
     vv_schedule: "select.vv_schedule",
     aux_heating: "select.aux_heating",
+    heatpump_state: "select.heatpump_state",
     comp_icon: "binary_sensor.soft_starter_compressor",
     cv_pump_icon: "binary_sensor.circ_pump_cv",
     defrost_icon: "binary_sensor.four_way_valve_defrost",

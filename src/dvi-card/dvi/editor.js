@@ -42,6 +42,7 @@ export class DviHeatpumpCardEditor extends HTMLElement {
 			{ name: "cv_night", label: "CV night mode (cv_night)", selector: { entity: { domain: "select" } } },
 			{ name: "vv_schedule", label: "VV schedule (vv_schedule)", selector: { entity: { domain: "select" } } },
 			{ name: "aux_heating", label: "Aux / electric heater mode (aux_heating)", selector: { entity: { domain: "select" } } },
+			{ name: "heatpump_state", label: "Heatpump state (heatpump_state)", selector: { entity: { domain: "select" } } },
 			{ name: "heating_config", label: "Heating configuration (heating_config)", selector: { entity: { domain: "select" } } },			
 			{ name: "vv_setpoint", label: "Warm water setpoint (vv_setpoint)", selector: { entity: { domain: ["number", "input_number"] } } },
 			{ name: "cv_curve_number", label: "Curve shift (cv_curve)", selector: { entity: { domain: "number" } } },
@@ -158,6 +159,7 @@ export class DviHeatpumpCardEditor extends HTMLElement {
 			cv_night: find("select", "cv_night"),
 			vv_schedule: find("select", "vv_schedule"),
 			aux_heating: find("select", "aux_heating"),
+			heatpump_state: find("select", "heatpump_state"),
 			heating_config: find("select", "heating_config"),
 			vv_setpoint: find("number", "vv_setpoint") || find("input_number", "vv_setpoint"),
 			cv_curve_number: find("number", "cv_curve"),
@@ -217,6 +219,8 @@ export class DviHeatpumpCardEditor extends HTMLElement {
 			patch.heating_hours,
 		].filter(Boolean);
 
+		const heatpump_entities = [patch.heatpump_state].filter(Boolean);
+
 		this._config = {
 			...this._config,
 			...patch,
@@ -224,6 +228,7 @@ export class DviHeatpumpCardEditor extends HTMLElement {
 			cv_entities,
 			vv_entities,
 			aux_entities,
+			heatpump_entities,
 		};
 
 		this._render();

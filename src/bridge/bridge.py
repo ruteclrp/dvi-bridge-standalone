@@ -1151,6 +1151,7 @@ while True:
             0x0B: "vv_setpoint",
             0x0C: "vv_schedule",
             0x0F: "aux_heating",
+            0x9C: "heatpump_state",
             0xA1: "comp_hours",
             0xA2: "vv_hours",
             0xA3: "heating_hours",

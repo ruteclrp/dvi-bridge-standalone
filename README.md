@@ -259,6 +259,7 @@ When adding the card in Lovelace, a full configuration UI appears.
 
 The auto-mapping includes:
 
+* Heatpump state (Stand by / On)
 * CV mode
 * VV mode
 * CV night mode
@@ -267,7 +268,7 @@ The auto-mapping includes:
 * Pump type (AW or BW) for correct diagram display
 * All relevant temperature sensors (including BW cold side sensors)
 * Pump / compressor / defrost binary sensors
-* Entities for the popup panels (Info / CV / VV / AUX)
+* Entities for the popup panels (Info / CV / VV / AUX / Heatpump)
 
 **Note:** The `pump_type` entity (sensor.pump_type) is automatically detected and used to display the correct diagram (AW = Air-to-Water with evaporator, BW = Brine-to-Water/Geothermal with cold side sensors). Make sure this entity is included in your configuration.
 

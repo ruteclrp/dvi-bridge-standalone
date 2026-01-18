@@ -61,8 +61,9 @@ class DviHeatpumpCard extends HTMLElement {
 		this._config = config;
 		this._root = this.attachShadow({ mode: "open" });
 		const styleUrl = new URL("./dvi/heatpump-card.css", import.meta.url).href;
+		const styleUrlWithCacheBust = `${styleUrl}?v=${Date.now()}`;
 		this._root.innerHTML = `
-      <style>@import url("${styleUrl}");</style>
+      <style>@import url("${styleUrlWithCacheBust}");</style>
       <ha-card>
         <div class="header" id="card-header"></div>
         <div class="diagram" id="diagram"></div>

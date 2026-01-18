@@ -241,7 +241,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const heatpumpChipClasses = `mode-chip popup-chip ${chipStateClass(heatpumpActive)}`;
 
 	const heatCurveChipHtml = `
-    <div class="mode-bar mode-bar--bottom">
+    <div class="mode-bar mode-bar--bottom" style="left: 17%; transform: none; justify-content: flex-start;">
       ${
 				heatpumpEntities.length
 					? `<div class="${heatpumpChipClasses}" data-popup="heatpump">

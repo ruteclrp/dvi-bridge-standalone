@@ -205,13 +205,16 @@ ha-card {
 	gap: 6px;
 }
 
-.mode-bar.mode-bar--bottom {
-	top: auto;
-	bottom: 4%;
-	left: 17%;
-	right: auto;
-	transform: none;
-	justify-content: flex-start;
+.diagram .mode-bar.mode-bar--bottom {
+	position: absolute !important;
+	top: auto !important;
+	bottom: 4% !important;
+	left: 17% !important;
+	right: auto !important;
+	transform: none !important;
+	justify-content: flex-start !important;
+	margin-left: 0 !important;
+	margin-right: auto !important;
 	z-index: 5;
 	padding: 0 8px;
 }

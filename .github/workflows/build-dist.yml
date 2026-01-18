@@ -246,7 +246,58 @@ jobs:
           find release/installation-scripts -type f -print
 
       # -----------------------------
-      # 8. Publish GitHub Release with RPi packages
+      # 8. Commit RPi packages to bridge_assets folder
+      # -----------------------------
+      - name: Store RPi Packages in Repository
+        run: |
+          BRANCH="${{ steps.version.outputs.branch }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Switch to the branch
+          git checkout $BRANCH
+          
+          # Create versioned folder for RPi packages
+          mkdir -p bridge_assets/$VERSION
+          
+          # Copy tarballs to versioned folder
+          cp release/*.rpi.tar.gz bridge_assets/$VERSION/
+          
+          # Create README for this version
+          cat > bridge_assets/$VERSION/README.md << EOF
+          # DVI Bridge Packages - $VERSION
+          
+          ## Available Packages
+          
+          - **dvi-bridge-basic-$VERSION.rpi.tar.gz** - MQTT bridge only
+          - **dvi-sidecar-$VERSION.rpi.tar.gz** - Web interface (requires bridge)
+          - **dvi-complete-runtime-$VERSION.rpi.tar.gz** - Complete all-in-one package
+          - **dvi-installation-scripts-$VERSION.rpi.tar.gz** - Installation scripts
+          
+          ## Download
+          
+          Click on the desired .rpi.tar.gz file above, then click "Download" or "Raw".
+          
+          ## Installation
+          
+          See the main [README](../../README.md) for installation instructions.
+          EOF
+          
+          # Add to git
+          git add bridge_assets/$VERSION/
+          
+          # Commit if there are changes
+          if ! git diff --staged --quiet; then
+            git commit -m "Add RPi packages for $VERSION"
+            git push origin $BRANCH
+          else
+            echo "No new packages to commit"
+          fi
+          
+          # Go back to tag for release creation
+          git checkout ${GITHUB_REF#refs/tags/}
+      
+      # -----------------------------
+      # 9. Publish GitHub Release (no files attached - HACS needs clean releases)
       # -----------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -260,28 +311,19 @@ jobs:
             
             ### For Home Assistant (HACS)
             The HACS card is distributed via the repository's `dist/` folder.
-            Simply add this repository in HACS (Category: Dashboard) and it will work automatically.
+            Add this repository in HACS (Category: Dashboard) and it will automatically fetch the card.
             
             ### For Raspberry Pi Bridge
-            Download the appropriate package(s) below:
             
-            **Option 1: Basic Bridge Only**
-            - Download: `dvi-bridge-basic-${{ steps.version.outputs.version }}.rpi.tar.gz`
-            - Minimal installation, MQTT bridge only
+            **Download packages directly from the repository:**
             
-            **Option 2: Sidecar Web Interface**
-            - Download: `dvi-sidecar-${{ steps.version.outputs.version }}.rpi.tar.gz`
-            - Standalone web interface (requires bridge running separately)
+            Browse to [bridge_assets/${{ steps.version.outputs.version }}](https://github.com/ruteclrp/dvi-bridge-standalone/tree/${{ steps.version.outputs.branch }}/bridge_assets/${{ steps.version.outputs.version }}) and download:
             
-            **Option 3: Complete All-in-One**
-            - Download: `dvi-complete-runtime-${{ steps.version.outputs.version }}.rpi.tar.gz`
-            - Everything included (bridge + sidecar)
+            - **dvi-bridge-basic-${{ steps.version.outputs.version }}.rpi.tar.gz** - MQTT bridge only, minimal installation
+            - **dvi-sidecar-${{ steps.version.outputs.version }}.rpi.tar.gz** - Web interface (requires bridge running separately)
+            - **dvi-complete-runtime-${{ steps.version.outputs.version }}.rpi.tar.gz** - Everything included (bridge + sidecar)
+            - **dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz** - Installation scripts (install.sh and update.sh)
             
-            **Installation Scripts**
-            - Download: `dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz`
-            - Contains install.sh and update.sh
-          files: |
-            release/dvi-bridge-basic-${{ steps.version.outputs.version }}.rpi.tar.gz
-            release/dvi-sidecar-${{ steps.version.outputs.version }}.rpi.tar.gz
-            release/dvi-complete-runtime-${{ steps.version.outputs.version }}.rpi.tar.gz
-            release/dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz
+            Click on a file, then click "Download" or view "Raw" to download.
+            
+            **Installation:** See the main [README](https://github.com/ruteclrp/dvi-bridge-standalone/blob/main/README.md) for detailed instructions.

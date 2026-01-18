@@ -36,11 +36,11 @@ jobs:
       - name: Build HACS Card Package
         run: |
           rm -rf dist
-          mkdir -p dist/dvi-card
+          mkdir -p dist
 
-          # Copy only card files for Home Assistant HACS
+          # Copy card structure exactly as-is from src
           cp src/dvi-card/dvi-heatpump-card.js dist/
-          cp -r src/dvi-card/dvi dist/dvi-card/
+          cp -r src/dvi-card/dvi dist/
           
           echo "${{ steps.version.outputs.version }}" > dist/VERSION
 

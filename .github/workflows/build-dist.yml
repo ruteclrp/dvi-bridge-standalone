@@ -29,6 +29,14 @@ jobs:
         run: |
           VERSION="${GITHUB_REF#refs/tags/}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Get the branch name that the tag was created from
+          BRANCH=$(git branch -r --contains $GITHUB_SHA | grep -v HEAD | sed 's/.*origin\///' | head -1)
+          if [ -z "$BRANCH" ]; then
+            BRANCH="main"
+          fi
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "Branch: $BRANCH"
 
       # -----------------------------
       # 3. Build HACS Card Package (dist/)
@@ -44,16 +52,54 @@ jobs:
           
           echo "${{ steps.version.outputs.version }}" > dist/VERSION
 
-          echo "== HACS dist package =="
-          find dist -type f -print
+          echo "== HACS dist package structure =="
+          tree dist/ || find dist -type f -print
+          
+          echo "== Verifying dvi folder exists =="
+          ls -la dist/dvi/ || echo "ERROR: dvi folder not found!"
 
       - name: Commit dist folder to repository
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add dist/
-          git diff --staged --quiet || git commit -m "Build dist for ${{ steps.version.outputs.version }}"
-          git push origin HEAD:${GITHUB_REF#refs/heads/} || git push origin HEAD:main
+          
+          # Get the branch name from the earlier step
+          BRANCH="${{ steps.version.outputs.branch }}"
+          echo "Committing to branch: $BRANCH"
+          
+          # Fetch and checkout the source branch
+          git fetch origin $BRANCH
+          git checkout $BRANCH
+          
+          # Ensure ONLY dist folder exists (no release artifacts)
+          rm -rf release/ sidecar/ *.tar.gz
+          
+          echo "== Contents before git add =="
+          ls -la dist/
+          echo "== dvi folder contents =="
+          ls -la dist/dvi/ || echo "ERROR: dvi folder missing!"
+          
+          # Force add all files in dist recursively
+          git add -f dist/
+          git add -f dist/dvi/
+          
+          echo "== Git status after add =="
+          git status
+          
+          # Commit if there are changes
+          if ! git diff --staged --quiet; then
+            git commit -m "Build dist for ${{ steps.version.outputs.version }}"
+            
+            echo "== Files being pushed =="
+            git show --name-only --pretty="" HEAD
+            
+            git push origin $BRANCH
+          else
+            echo "No changes to commit"
+          fi
+          
+          # Go back to tag for release creation
+          git checkout ${GITHUB_REF#refs/tags/}
 
       # -----------------------------
       # 4. Build Bridge Basic Package (RPi)
@@ -208,12 +254,12 @@ jobs:
           tag_name: ${{ steps.version.outputs.version }}
           name: "Release ${{ steps.version.outputs.version }}"
           draft: false
-          prerelease: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'pre') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
           body: |
             ## Installation Packages
             
             ### For Home Assistant (HACS)
-            - HACS will automatically fetch the card from the `dist/` folder
+            - HACS will automatically fetch the card from the `dist/` folder on branch: ${{ steps.version.outputs.branch }}
             - No manual download needed if using HACS
             
             ### For Raspberry Pi Bridge

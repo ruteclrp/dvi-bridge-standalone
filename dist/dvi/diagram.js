@@ -234,8 +234,22 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const cvNightIcon = cvNight ? CV_NIGHT_ICONS[cvNight] ?? null : null;
 	const vvScheduleIcon = vvSchedule ? VV_SCHEDULE_ICONS[vvSchedule] ?? null : null;
 
+	const infoChipClasses = "mode-chip popup-chip mode-chip--info mode-chip--active";
+	const cvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(cvActive)}`;
+	const vvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(vvActive)}`;
+	const auxChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(auxActive)}`;
+	const heatpumpChipClasses = `mode-chip popup-chip ${chipStateClass(heatpumpActive)}`;
+
 	const heatCurveChipHtml = `
     <div class="mode-bar mode-bar--bottom">
+      ${
+				heatpumpEntities.length
+					? `<div class="${heatpumpChipClasses}" data-popup="heatpump">
+               <ha-icon icon="mdi:heat-pump${heatpumpActive ? '' : '-outline'}" style="color:${heatpumpActive ? 'var(--success-color, #4caf50)' : 'var(--disabled-text-color)'};"></ha-icon>
+               <ha-icon icon="mdi:power" style="color:${heatpumpActive ? 'var(--success-color, #4caf50)' : 'var(--disabled-text-color)'};"></ha-icon>
+             </div>`
+					: ""
+			}
       <div class="mode-chip heat-curve-trigger mode-chip--info mode-chip--active clickable" data-heat-curve-trigger="true">
         <ha-icon icon="mdi:chart-bell-curve-cumulative"></ha-icon>
         <span class="chip-label">CV Curve</span>
@@ -243,12 +257,6 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
       </div>
     </div>
   `;
-
-	const infoChipClasses = "mode-chip popup-chip mode-chip--info mode-chip--active";
-	const cvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(cvActive)}`;
-	const vvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(vvActive)}`;
-	const auxChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(auxActive)}`;
-	const heatpumpChipClasses = `mode-chip popup-chip ${chipStateClass(heatpumpActive)}`;
 
 	const html = `
     <img src="${imageBase}/${baseDiagram}" class="diagram-base" alt="${pumpType || 'AW'} diagram" />
@@ -366,15 +374,6 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
     ${auxDiagramIconHtml}
 
     <div class="mode-bar">
-      ${
-				heatpumpEntities.length
-					? `<div class="${heatpumpChipClasses}" data-popup="heatpump">
-               <ha-icon icon="mdi:heat-pump${heatpumpActive ? '' : '-outline'}" style="color:${heatpumpActive ? 'var(--success-color, #4caf50)' : 'var(--disabled-text-color)'};"></ha-icon>
-               <span class="chip-label">HP</span>
-             </div>`
-					: ""
-			}
-
       ${
 				infoEntities.length
 					? `<div class="${infoChipClasses}" data-popup="info">

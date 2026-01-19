@@ -66,6 +66,7 @@ class DviHeatpumpCard extends HTMLElement {
       <style>@import url("${styleUrlWithCacheBust}");</style>
       <ha-card>
         <div class="header" id="card-header"></div>
+        <div class="mode-chips-bar" id="mode-chips-bar"></div>
         <div class="diagram" id="diagram"></div>
       </ha-card>
     `;
@@ -90,7 +91,8 @@ class DviHeatpumpCard extends HTMLElement {
 		if (!this._config || !this._root || !this._hass) return;
 
 		const diagram = this._root.getElementById("diagram");
-		if (!diagram) return;
+		const modeChipsBar = this._root.getElementById("mode-chips-bar");
+		if (!diagram || !modeChipsBar) return;
 
 		const view = buildDiagramView({
 			hass: this._hass,
@@ -99,11 +101,12 @@ class DviHeatpumpCard extends HTMLElement {
 			pumpType: this._pumpType,
 		});
 
-		diagram.innerHTML = view.html;
+		diagram.innerHTML = view.diagramHtml;
+		modeChipsBar.innerHTML = view.chipsHtml;
 		bindHistoryHooks(diagram, view.stateEntityMap, this);
 		bindIconHooks(diagram, view.iconEntityMap, this);
-		wireModeChips(diagram, this._hass, view.chipGroups);
-		this._bindHeatCurveTrigger(diagram);
+		wireModeChips(modeChipsBar, this._hass, view.chipGroups);
+		this._bindHeatCurveTrigger(modeChipsBar);
 	}
 
 	_bindHeatCurveTrigger(diagram) {

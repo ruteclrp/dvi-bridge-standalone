@@ -320,6 +320,19 @@ function setupPopupHandler(hass) {
     if (!content || !content.entities) return;
 
     modalTitle.textContent = title || "Details";
+    
+    // Reset modal-content to default sizing for mode chip popups (entities type)
+    // This prevents inheriting fixed widths from previous heat curve or history popups
+    const modalContent = document.querySelector('.modal-content');
+    if (modalContent) {
+      modalContent.style.width = 'fit-content';
+      modalContent.style.minWidth = '400px';
+      modalContent.style.maxWidth = '600px';
+      modalContent.style.overflowX = 'visible';
+    }
+    // Reset modal-body padding to defaults
+    modalBody.style.paddingLeft = '';
+    modalBody.style.paddingRight = '';
     const entities = Array.isArray(content.entities) ? content.entities : Object.values(content.entities);
 
     modalBody.innerHTML = entities

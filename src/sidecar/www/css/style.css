@@ -40,7 +40,7 @@
     min-width: 400px;
     max-height: 80vh;
     overflow-y: auto;
-    overflow-x: auto;
+    overflow-x: visible;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
     display: flex;
     flex-direction: column;
@@ -82,8 +82,9 @@
 
   .modal-body {
     padding: 16px 20px;
-    width: fit-content;
-    min-width: 100%;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: visible;
   }
 
   .entity-row {
@@ -92,6 +93,9 @@
     align-items: center;
     padding: 12px 0;
     border-bottom: 1px solid #2a2a2a;
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
   }
 
   .entity-row:last-child {
@@ -101,12 +105,16 @@
   .entity-name {
     color: #ccc;
     font-size: 0.95em;
+    flex: 1;
+    min-width: 0;
+    margin-right: 16px;
   }
 
   .entity-state {
     color: #03a9f4;
     font-weight: 600;
     font-size: 0.95em;
+    flex-shrink: 0;
   }
 
   .entity-control {
@@ -117,6 +125,7 @@
     border-radius: 4px;
     font-size: 0.9em;
     min-width: 120px;
+    flex-shrink: 0;
   }
 
   .entity-control:focus {

@@ -241,8 +241,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const heatpumpChipClasses = `mode-chip popup-chip ${chipStateClass(heatpumpActive)}`;
 
 	const heatCurveChipHtml = `
-    <div class="mode-bar mode-bar--bottom" style="left: 17%; transform: none; justify-content: flex-start;">
-      ${
+${
 				heatpumpEntities.length
 					? `<div class="${heatpumpChipClasses}" data-popup="heatpump">
                <ha-icon icon="mdi:heat-pump${heatpumpActive ? '' : '-outline'}" style="color:${heatpumpActive ? 'var(--success-color, #4caf50)' : 'var(--disabled-text-color)'};"></ha-icon>
@@ -255,10 +254,61 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
         <span class="chip-label">CV Curve</span>
         ${curveTemp !== null ? `<span class="chip-value">${valueWithUnit("curve", curveTemp)}</span>` : ""}
       </div>
-    </div>
   `;
 
-	const html = `
+	// Build mode chips HTML (to be rendered in the mode-chips-bar)
+	const chipsHtml = `
+      ${
+				infoEntities.length
+					? `<div class="${infoChipClasses}" data-popup="info">
+               <ha-icon icon="mdi:information-slab-circle"></ha-icon>
+               <span class="chip-label">Info</span>
+               ${power !== null ? `<span class="chip-value">${power} kW</span>` : ""}
+             </div>`
+					: ""
+			}
+
+      ${
+				cvEntities.length
+					? `<div class="${cvChipClasses}" data-popup="cv">
+               <ha-icon icon="mdi:radiator" style="color:${cvIconColor};"></ha-icon>
+               ${
+									cvNightIcon
+										? `<ha-icon class="small-mode-icon" icon="${cvNightIcon}" style="color:${cvIconColor};"></ha-icon>`
+										: ""
+								}
+               <span class="chip-label">CV</span>
+             </div>`
+					: ""
+			}
+
+      ${
+				vvEntities.length
+					? `<div class="${vvChipClasses}" data-popup="vv">
+               <ha-icon icon="mdi:shower-head" style="color:${vvIconColor};"></ha-icon>
+               ${
+									vvScheduleIcon
+										? `<ha-icon class="small-mode-icon" icon="${vvScheduleIcon}" style="color:${vvScheduleColor};"></ha-icon>`
+										: ""
+								}
+               <span class="chip-label">VV</span>
+             </div>`
+					: ""
+			}
+
+      ${
+				auxEntities.length
+					? `<div class="${auxChipClasses}" data-popup="aux">
+               ${auxChipIconHtml ? auxChipIconHtml : `<ha-icon icon="mdi:lightning-bolt-outline" style="color:${auxIconColor};"></ha-icon>`}
+                <span class="chip-label">AUX</span>
+              </div>`
+					: ""
+			}
+      
+      ${heatCurveChipHtml}
+  `;
+
+	const diagramHtml = `
     <img src="${imageBase}/${baseDiagram}" class="diagram-base" alt="${pumpType || 'AW'} diagram" />
 
     ${
@@ -372,60 +422,11 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 		}
 
     ${auxDiagramIconHtml}
-
-    <div class="mode-bar">
-      ${
-				infoEntities.length
-					? `<div class="${infoChipClasses}" data-popup="info">
-               <ha-icon icon="mdi:information-slab-circle"></ha-icon>
-               <span class="chip-label">Info</span>
-               ${power !== null ? `<span class="chip-value">${power} kW</span>` : ""}
-             </div>`
-					: ""
-			}
-
-      ${
-				cvEntities.length
-					? `<div class="${cvChipClasses}" data-popup="cv">
-               <ha-icon icon="mdi:radiator" style="color:${cvIconColor};"></ha-icon>
-               ${
-									cvNightIcon
-										? `<ha-icon class="small-mode-icon" icon="${cvNightIcon}" style="color:${cvIconColor};"></ha-icon>`
-										: ""
-								}
-               <span class="chip-label">CV</span>
-             </div>`
-					: ""
-			}
-
-      ${
-				vvEntities.length
-					? `<div class="${vvChipClasses}" data-popup="vv">
-               <ha-icon icon="mdi:shower-head" style="color:${vvIconColor};"></ha-icon>
-               ${
-									vvScheduleIcon
-										? `<ha-icon class="small-mode-icon" icon="${vvScheduleIcon}" style="color:${vvScheduleColor};"></ha-icon>`
-										: ""
-								}
-               <span class="chip-label">VV</span>
-             </div>`
-					: ""
-			}
-
-      ${
-				auxEntities.length
-					? `<div class="${auxChipClasses}" data-popup="aux">
-               ${auxChipIconHtml ? auxChipIconHtml : `<ha-icon icon="mdi:lightning-bolt-outline" style="color:${auxIconColor};"></ha-icon>`}
-                <span class="chip-label">AUX</span>
-              </div>`
-					: ""
-			}
-    </div>
-    ${heatCurveChipHtml}
   `;
 
 	return {
-		html,
+		diagramHtml,
+		chipsHtml,
 		stateEntityMap,
 		iconEntityMap,
 		chipGroups: {

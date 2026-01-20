@@ -1,5 +1,6 @@
 {
   "name": "DVI Heatpump Card",
+  "filename": "dvi-heatpump-card.js",
   "render_readme": true,
   "hide_default_branch": false,
   "homeassistant": "2024.12.0",

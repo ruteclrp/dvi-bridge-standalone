@@ -16,7 +16,7 @@ ha-card {
 
 /* ============ Mode Chips Bar ============ */
 .mode-chips-bar {
-	background: rgba(255, 255, 255, 0.95);
+	background: #FFFFFF;
 	padding: 8px 16px;
 	margin: 0 auto;
 	max-width: 600px;

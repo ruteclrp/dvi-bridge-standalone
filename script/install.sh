@@ -25,23 +25,44 @@ get_available_versions() {
   local versions=$(curl -s "$api_url" | grep '"name"' | sed 's/.*"name": "\(.*\)".*/\1/' | grep '^v' | sort -V)
   
   if [ -z "$versions" ]; then
-    log "  ⚠ Failed to fetch versions from GitHub. Using fallback..." >&2
+    log "  ⚠ API failed, trying alternative method..." >&2
+    # Try to fetch README.md from bridge_assets which lists versions
+    versions=$(curl -s "https://raw.githubusercontent.com/$REPO/main/bridge_assets/README.md" | grep -o 'v[0-9]\+\.[0-9]\+' | sort -V | uniq)
+  fi
+  
+  if [ -z "$versions" ]; then
+    log "  ⚠ Alternative method failed, checking local directories..." >&2
     # Fallback to local directory if script is run from repo
     if [ -d "../bridge_assets" ]; then
       versions=$(ls -1 ../bridge_assets | grep '^v' | sort -V)
     fi
   fi
   
-  log "  ✓ Found $(echo "$versions" | wc -l) version(s), showing last 10" >&2
+  if [ -z "$versions" ]; then
+    log "  ⚠ Using hardcoded version list..." >&2
+    # Last resort: hardcoded list of known versions
+    versions="v6.01 v6.02 v6.03 v6.04 v6.10 v6.20 v6.21 v6.22 v6.23"
+  fi
+  
+  log "  ✓ Found $(echo "$versions" | wc -w) version(s), showing last 10" >&2
   log "" >&2
   
-  # Get last 10 versions - output to stdout for capture
-  echo "$versions" | tail -n 10 | tr '\n' ' '
+  # Get last 10 versions - only this goes to stdout
+  echo "$versions" | tr ' ' '\n' | tail -n 10 | tr '\n' ' '
 }
 
 # Function to select version interactively
 select_version() {
   local versions=($(get_available_versions))
+  
+  # Check if any versions were found
+  if [ ${#versions[@]} -eq 0 ]; then
+    log "ERROR: No versions found. Cannot continue." >&2
+    log "" >&2
+    log "Please specify a version manually: ./install.sh v6.23" >&2
+    exit 1
+  fi
+  
   local latest="${versions[-1]}"
   
   log "Available versions:" >&2
@@ -171,7 +192,7 @@ case "$MODE" in
     log "  ✓ Downloaded $TARBALL"
     log ""
     log "[3/7] Extracting files..."
-    tar xzvf "$TARBALL" -C "$BASE" --strip-components=1 | head -20
+    tar xzf "$TARBALL" -C "$BASE" --strip-components=1
     log "  ✓ Extracted to $BASE"
     log ""
     INSTALL_BRIDGE=true
@@ -192,8 +213,12 @@ case "$MODE" in
     log "  ✓ Downloaded sidecar package"
     log ""
     log "[3/7] Extracting files..."
-    tar xzvf "$BRIDGE_TAR" -C "$BASE" --strip-components=1 | head -20
-    tar xzvf "$SIDECAR_TAR" -C "$BASE" --strip-components=1 | head -20
+    log "  Extracting bridge package..."
+    tar xzf "$BRIDGE_TAR" -C "$BASE" --strip-components=1
+    log "  ✓ Extracted bridge"
+    log "  Extracting sidecar package..."
+    tar xzf "$SIDECAR_TAR" -C "$BASE" --strip-components=1
+    log "  ✓ Extracted sidecar"
     log "  ✓ Extracted all packages to $BASE"
     log ""
     INSTALL_BRIDGE=true
@@ -209,7 +234,7 @@ case "$MODE" in
     log "  ✓ Downloaded $TARBALL"
     log ""
     log "[3/7] Extracting files..."
-    tar xzvf "$TARBALL" -C "$BASE" --strip-components=1 | head -20
+    tar xzf "$TARBALL" -C "$BASE" --strip-components=1
     log "  ✓ Extracted to $BASE"
     log ""
     INSTALL_BRIDGE=true

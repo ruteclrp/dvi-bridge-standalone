@@ -16,6 +16,7 @@ const CHIP_TITLES = {
 	cv: "Centralvarme",
 	vv: "Varmtvandstemperatur",
 	aux: "El-patron / AUX",
+	tailscale: "Tailscale",
 };
 
 const opacityFor = (state) => (state === "on" ? 1 : 0.25);
@@ -223,6 +224,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const vvEntities = Array.isArray(config.vv_entities) ? config.vv_entities : [];
 	const auxEntities = Array.isArray(config.aux_entities) ? config.aux_entities : [];
 	const heatpumpEntities = config.heatpump_state ? [config.heatpump_state] : [];
+	const tailscaleEntities = config.tailscale_entity ? [config.tailscale_entity] : [];
 
 	const iconEntityMap = {
 		defrost: config.defrost_icon,
@@ -234,11 +236,18 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const cvNightIcon = cvNight ? CV_NIGHT_ICONS[cvNight] ?? null : null;
 	const vvScheduleIcon = vvSchedule ? VV_SCHEDULE_ICONS[vvSchedule] ?? null : null;
 
+	const tailscaleState = config.tailscale_entity ? getState(config.tailscale_entity) : null;
+	const tailscaleActive = tailscaleState && (tailscaleState.toLowerCase() === "on" || tailscaleState.toLowerCase() === "connected");
+	const tailscaleIconColor = tailscaleActive
+			? "var(--success-color, #4caf50)"
+			: "var(--error-color, #f44336)";
+
 	const infoChipClasses = "mode-chip popup-chip mode-chip--info mode-chip--active";
 	const cvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(cvActive)}`;
 	const vvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(vvActive)}`;
 	const auxChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(auxActive)}`;
 	const heatpumpChipClasses = `mode-chip popup-chip ${chipStateClass(heatpumpActive)}`;
+	const tailscaleChipClasses = `mode-chip popup-chip ${chipStateClass(tailscaleActive)}`;
 
 	const heatCurveChipHtml = `
 ${
@@ -304,7 +313,14 @@ ${
               </div>`
 					: ""
 			}
-      
+      ${
+					tailscaleEntities.length
+					? `<div class="${tailscaleChipClasses}" data-popup="tailscale">
+               <ha-icon icon="mdi:lan${tailscaleActive ? '-connect' : '-disconnect'}" style="color:${tailscaleIconColor};"></ha-icon>
+               <span class="chip-label">VPN</span>
+             </div>`
+					: ""
+			}      
       ${heatCurveChipHtml}
   `;
 
@@ -435,6 +451,7 @@ ${
 			cv: { title: CHIP_TITLES.cv, entities: cvEntities },
 			vv: { title: CHIP_TITLES.vv, entities: vvEntities },
 			aux: { title: CHIP_TITLES.aux, entities: auxEntities },
+			tailscale: { title: CHIP_TITLES.tailscale, entities: tailscaleEntities },
 		},
 	};
 }

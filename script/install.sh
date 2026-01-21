@@ -1,84 +1,246 @@
-```bash
-#!/usr/bin/env bash
+#!/bin/bash
+
+# Simple and verbose installer
 set -e
 
-REPO="ruteclrp/dvi-bridge-standalone"
-VERSION="$1"
-MODE="${2:-basic}"  # basic, sidecar, or complete
+log() {
+    echo "$@"
+}
 
-if [ -z "$VERSION" ]; then
-  echo "Usage: ./install.sh vX.Y.Z [mode]"
-  echo "  mode: basic (default), sidecar, complete"
-  echo ""
-  echo "Examples:"
-  echo "  ./install.sh v1.0.0 basic     - Install bridge only"
-  echo "  ./install.sh v1.0.0 sidecar   - Install bridge + sidecar web interface"
-  echo "  ./install.sh v1.0.0 complete  - Install all components (legacy)"
-  exit 1
+log "=========================================="
+log "DVI Bridge Standalone Installer"
+log "=========================================="
+log ""
+log "Script starting at $(date)"
+log ""
+
+REPO="ruteclrp/dvi-bridge-standalone"
+
+# Function to get available versions from GitHub
+get_available_versions() {
+  log "Fetching available versions from GitHub..." >&2
+  
+  # Fetch directory listing from GitHub API
+  local api_url="https://api.github.com/repos/$REPO/contents/bridge_assets"
+  local versions=$(curl -s "$api_url" | grep '"name"' | sed 's/.*"name": "\(.*\)".*/\1/' | grep '^v' | sort -V)
+  
+  if [ -z "$versions" ]; then
+    log "  ⚠ Failed to fetch versions from GitHub. Using fallback..." >&2
+    # Fallback to local directory if script is run from repo
+    if [ -d "../bridge_assets" ]; then
+      versions=$(ls -1 ../bridge_assets | grep '^v' | sort -V)
+    fi
+  fi
+  
+  log "  ✓ Found $(echo "$versions" | wc -l) version(s), showing last 10" >&2
+  log "" >&2
+  
+  # Get last 10 versions - output to stdout for capture
+  echo "$versions" | tail -n 10 | tr '\n' ' '
+}
+
+# Function to select version interactively
+select_version() {
+  local versions=($(get_available_versions))
+  local latest="${versions[-1]}"
+  
+  log "Available versions:" >&2
+  for i in "${!versions[@]}"; do
+    printf "  %d) %s" "$((i+1))" "${versions[$i]}" >&2
+    if [ "${versions[$i]}" = "$latest" ]; then
+      printf " (latest)" >&2
+    fi
+    printf "\n" >&2
+  done
+  log "" >&2
+  
+  while true; do
+    read -p "Select version number (or press Enter for latest): " choice >&2
+    
+    if [ -z "$choice" ]; then
+      echo "$latest"
+      return 0
+    fi
+    
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#versions[@]}" ]; then
+      echo "${versions[$((choice-1))]}"
+      return 0
+    else
+      log "  ⚠ Invalid selection. Please enter a number between 1 and ${#versions[@]}" >&2
+    fi
+  done
+}
+
+# Function to select installation mode interactively
+select_mode() {
+  log "" >&2
+  log "Installation modes:" >&2
+  log "  1) basic     - Bridge only (MQTT communication)" >&2
+  log "  2) sidecar   - Bridge + Web interface" >&2
+  log "  3) complete  - All components (legacy)" >&2
+  log "" >&2
+  
+  while true; do
+    read -p "Select installation mode (or press Enter for basic): " choice >&2
+    
+    case "$choice" in
+      ""|1)
+        echo "basic"
+        return 0
+        ;;
+      2)
+        echo "sidecar"
+        return 0
+        ;;
+      3)
+        echo "complete"
+        return 0
+        ;;
+      *)
+        log "  ⚠ Invalid selection. Please enter 1, 2, or 3" >&2
+        ;;
+    esac
+  done
+}
+
+# Check if running in interactive or non-interactive mode
+if [ -z "$1" ]; then
+  # Interactive mode
+  log "Running in interactive mode..."
+  log ""
+  VERSION=$(select_version)
+  MODE=$(select_mode)
+  
+  log ""
+  log "You have selected:"
+  log "  Version: $VERSION"
+  log "  Mode: $MODE"
+  log ""
+  
+  read -p "Proceed with installation? (y/n): " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    log "Installation cancelled by user"
+    exit 0
+  fi
+  log ""
+else
+  # Non-interactive mode with command-line arguments
+  VERSION="$1"
+  MODE="${2:-basic}"
+  
+  # Validate mode
+  if [[ ! "$MODE" =~ ^(basic|sidecar|complete)$ ]]; then
+    log "ERROR: Invalid mode '$MODE'"
+    log ""
+    log "Usage: ./install.sh [vX.Y.Z] [mode]"
+    log "  mode: basic (default), sidecar, complete"
+    log ""
+    log "Examples:"
+    log "  ./install.sh              - Interactive mode"
+    log "  ./install.sh v6.21        - Install v6.21 in basic mode"
+    log "  ./install.sh v6.21 basic     - Install bridge only"
+    log "  ./install.sh v6.21 sidecar   - Install bridge + sidecar web interface"
+    log "  ./install.sh v6.21 complete  - Install all components (legacy)"
+    exit 1
+  fi
 fi
 
-BASE="/home/dviha/dvi-bridge"
-RELEASE_DIR="$BASE/releases/$VERSION"
+log "Installation parameters:"
+log "  Version: $VERSION"
+log "  Mode: $MODE"
+log "  Repository: $REPO"
+log ""
 
-echo "== Creating directory structure =="
-mkdir -p "$BASE/releases"
+BASE="/home/dviha/dvi-bridge"
+
+log "[1/7] Creating directory structure..."
+mkdir -p "$BASE"
+log "  ✓ Created $BASE"
 cd /tmp
+log "  ✓ Working directory: /tmp"
+log ""
 
 case "$MODE" in
   basic)
-    echo "== Installing Bridge Basic (MQTT only) =="
+    log "[2/7] Downloading Bridge Basic (MQTT only)..."
     TARBALL="dvi-bridge-basic-$VERSION.rpi.tar.gz"
     URL="https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$TARBALL"
-    wget -q "$URL" -O "$TARBALL"
-    mkdir -p "$RELEASE_DIR"
-    tar xzf "$TARBALL" -C "$RELEASE_DIR" --strip-components=1
+    log "  URL: $URL"
+    wget -v "$URL" -O "$TARBALL"
+    log "  ✓ Downloaded $TARBALL"
+    log ""
+    log "[3/7] Extracting files..."
+    tar xzvf "$TARBALL" -C "$BASE" --strip-components=1 | head -20
+    log "  ✓ Extracted to $BASE"
+    log ""
     INSTALL_BRIDGE=true
     INSTALL_SIDECAR=false
     ;;
   
   sidecar)
-    echo "== Installing Bridge + Sidecar Web Interface =="
-    # Download bridge basic
-    BRIDGE_TAR="dvi-bridge-basic-$VERSION.rpi.tar.gz"
-    wget -q "https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$BRIDGE_TAR" -O "$BRIDGE_TAR"
-    mkdir -p "$RELEASE_DIR"
-    tar xzf "$BRIDGE_TAR" -C "$RELEASE_DIR" --strip-components=1
+    log "[2/7] Downloading Bridge + Sidecar packages..."
     
-    # Download sidecar
+    BRIDGE_TAR="dvi-bridge-basic-$VERSION.rpi.tar.gz"
+    log "  Downloading bridge..."
+    wget -v "https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$BRIDGE_TAR" -O "$BRIDGE_TAR"
+    log "  ✓ Downloaded bridge package"
+    
     SIDECAR_TAR="dvi-sidecar-$VERSION.rpi.tar.gz"
-    wget -q "https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$SIDECAR_TAR" -O "$SIDECAR_TAR"
-    tar xzf "$SIDECAR_TAR" -C "$RELEASE_DIR" --strip-components=1
+    log "  Downloading sidecar..."
+    wget -v "https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$SIDECAR_TAR" -O "$SIDECAR_TAR"
+    log "  ✓ Downloaded sidecar package"
+    log ""
+    log "[3/7] Extracting files..."
+    tar xzvf "$BRIDGE_TAR" -C "$BASE" --strip-components=1 | head -20
+    tar xzvf "$SIDECAR_TAR" -C "$BASE" --strip-components=1 | head -20
+    log "  ✓ Extracted all packages to $BASE"
+    log ""
     INSTALL_BRIDGE=true
     INSTALL_SIDECAR=true
     ;;
   
   complete)
-    echo "== Installing Complete Runtime (All components) =="
+    log "[2/7] Downloading Complete Runtime package..."
     TARBALL="dvi-complete-runtime-$VERSION.rpi.tar.gz"
     URL="https://raw.githubusercontent.com/$REPO/main/bridge_assets/$VERSION/$TARBALL"
-    wget -q "$URL" -O "$TARBALL"
-    mkdir -p "$RELEASE_DIR"
-    tar xzf "$TARBALL" -C "$RELEASE_DIR" --strip-components=1
+    log "  URL: $URL"
+    wget -v "$URL" -O "$TARBALL"
+    log "  ✓ Downloaded $TARBALL"
+    log ""
+    log "[3/7] Extracting files..."
+    tar xzvf "$TARBALL" -C "$BASE" --strip-components=1 | head -20
+    log "  ✓ Extracted to $BASE"
+    log ""
     INSTALL_BRIDGE=true
     INSTALL_SIDECAR=true
     ;;
   
   *)
-    echo "Error: Invalid mode '$MODE'. Use: basic, sidecar, or complete"
+    log "ERROR: Invalid mode '$MODE'. Use: basic, sidecar, or complete"
     exit 1
     ;;
 esac
 
-echo "== Creating Python virtual environment =="
+log "[4/7] Setting up Python virtual environment..."
 if [ ! -d "$BASE/venv" ]; then
+  log "  Creating new virtual environment..."
   python3 -m venv "$BASE/venv"
+  log "  ✓ Created virtual environment"
+else
+  log "  ✓ Virtual environment already exists"
 fi
 
 source "$BASE/venv/bin/activate"
+log "  Upgrading pip..."
 pip install --upgrade pip
-pip install -r "$RELEASE_DIR/requirements.txt"
+log "  ✓ Pip upgraded"
+log "  Installing Python dependencies..."
+pip install -r "$BASE/requirements.txt"
+log "  ✓ Dependencies installed"
+log ""
 
-echo "== Creating .env file =="
+log "[5/7] Creating configuration file..."
 if [ ! -f "$BASE/.env" ]; then
   cat > "$BASE/.env" << 'EOF'
 # MQTT Configuration
@@ -99,41 +261,110 @@ MQTT_PASS=
 # SERVICE_MM=
 # SERVICE_YY=
 EOF
-  echo "Created $BASE/.env - Edit MQTT settings as needed"
+  log "  ✓ Created $BASE/.env"
+  log ""
+  log "⚠ MQTT Configuration Required!"
+  log "The bridge needs MQTT broker settings to work."
+  log ""
+  read -p "Do you want to edit .env now? (y/n): " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]]; then
+    ${EDITOR:-nano} "$BASE/.env"
+    log "  ✓ Configuration updated"
+  else
+    log "  ⚠ Remember to edit $BASE/.env before starting the service"
+    log "    Edit with: nano $BASE/.env"
+    log "    Then restart: sudo systemctl restart bridge.service"
+  fi
+else
+  log "  ✓ Using existing .env file"
 fi
+log ""
 
-echo "== Updating current symlink =="
-ln -sfn "$RELEASE_DIR" "$BASE/current"
+log "[6/7] Saving version information..."
+echo "$VERSION" > "$BASE/VERSION"
+log "  ✓ Installed version: $VERSION"
+log ""
 
-echo "== Installing systemd services =="
+log "[7/7] Installing and starting systemd services..."
 if [ "$INSTALL_BRIDGE" = true ]; then
-  if [ -f "$RELEASE_DIR/systemd/bridge.service.example" ]; then
-    sudo cp "$RELEASE_DIR/systemd/bridge.service.example" "/etc/systemd/system/bridge.service"
+  if [ -f "$BASE/systemd/bridge.service.example" ]; then
+    log "  Installing bridge service..."
+    # Create service file with proper paths - replace ALL occurrences
+    sed -e "s|/home/<user>/dvi-bridge-standalone|$BASE|g" \
+        -e "s|/.venv/|/venv/|g" \
+        "$BASE/systemd/bridge.service.example" | sudo tee /etc/systemd/system/bridge.service > /dev/null
     sudo systemctl daemon-reload
     sudo systemctl enable bridge.service
-    sudo systemctl start bridge.service
-    echo "✓ Bridge service installed and started"
+    log "  Attempting to start bridge service..."
+    if sudo systemctl start bridge.service; then
+      log "  ✓ Bridge service installed and started"
+    else
+      log "  ⚠ Bridge service installed but failed to start"
+      log "  Check status with: sudo systemctl status bridge.service"
+      log "  Check logs with: sudo journalctl -u bridge.service -n 50"
+    fi
+  else
+    log "  ⚠ Bridge service file not found"
   fi
 fi
 
 if [ "$INSTALL_SIDECAR" = true ]; then
-  if [ -f "$RELEASE_DIR/systemd/webbridge.service.example" ]; then
-    sudo cp "$RELEASE_DIR/systemd/webbridge.service.example" "/etc/systemd/system/webbridge.service"
+  if [ -f "$BASE/systemd/webbridge.service.example" ]; then
+    log "  Installing webbridge service..."
+    # Create service file with proper paths - replace ALL occurrences
+    sed -e "s|/home/<user>/dvi-bridge-standalone|$BASE|g" \
+        -e "s|/.venv/|/venv/|g" \
+        "$BASE/systemd/webbridge.service.example" | sudo tee /etc/systemd/system/webbridge.service > /dev/null
     sudo systemctl daemon-reload
     sudo systemctl enable webbridge.service
-    sudo systemctl start webbridge.service
-    echo "✓ Sidecar web interface installed and started"
+    log "  Attempting to start webbridge service..."
+    if sudo systemctl start webbridge.service; then
+      log "  ✓ Webbridge service installed and started"
+    else
+      log "  ⚠ Webbridge service installed but failed to start"
+      log "  Check status with: sudo systemctl status webbridge.service"
+      log "  Check logs with: sudo journalctl -u webbridge.service -n 50"
+    fi
+  else
+    log "  ⚠ Webbridge service file not found"
   fi
 fi
 
-echo ""
-echo "== Installation complete =="
-echo "Version: $VERSION"
-echo "Mode: $MODE"
-echo "Location: $RELEASE_DIR"
+log ""
+log "=========================================="
+log "✓ Installation Complete!"
+log "=========================================="
+log "Version:  $VERSION"
+log "Mode:     $MODE"
+log "Location: $BASE"
+log ""
+
+if [ "$INSTALL_BRIDGE" = true ]; then
+  log "Bridge Status:"
+  sudo systemctl status bridge.service --no-pager -l | head -n 5 || true
+  log ""
+fi
 
 if [ "$INSTALL_SIDECAR" = true ]; then
-  echo ""
-  echo "Web interface available at: http://$(hostname -I | awk '{print $1}'):5555"
+  log "Web Interface:"
+  log "  URL: http://$(hostname -I | awk '{print $1}'):5555"
+  log ""
+  log "Webbridge Status:"
+  sudo systemctl status webbridge.service --no-pager -l | head -n 5 || true
+  log ""
 fi
-```
+
+log "Next steps:"
+if sudo systemctl is-active --quiet bridge.service 2>/dev/null; then
+  log "  ✓ Bridge is running"
+else
+  log "  ⚠ Bridge needs attention - check: sudo journalctl -u bridge.service -n 50"
+fi
+log "  1. Edit MQTT settings: nano $BASE/.env"
+log "  2. Check logs: sudo journalctl -u bridge.service -f"
+if [ "$INSTALL_SIDECAR" = true ]; then
+  log "  3. Check web logs: sudo journalctl -u webbridge.service -f"
+fi
+log ""
+log "Installation finished at $(date)"

@@ -291,8 +291,9 @@ jobs:
           See the main [README](../../README.md) for installation instructions.
           EOF
           
-          # Add to git
+          # Add to git (both versioned folder and root scripts package)
           git add bridge_assets/$VERSION/
+          git add bridge_assets/dvi-installation-scripts.rpi.tar.gz
           
           # Commit if there are changes
           if ! git diff --staged --quiet; then

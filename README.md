@@ -18,76 +18,36 @@ The repository is designed so both parts can live in the same project (bridge + 
 - MQTT broker (e.g. the Mosquitto broker add‑on in Home Assistant)
 - Git + Python 3.9+ on the Pi
 
-### 1. Install required packages on the Pi
-
-```bash
-sudo apt update
-sudo apt upgrade -y
-sudo apt install -y git python3 python3-pip python3-venv
-```
-
-### 2. Clone the repository
+### 1. download the scrips package on the Pi
 
 ```bash
 cd /home/dviha
-git clone https://github.com/ruteclrp/dvi-bridge-standalone.git
-cd dvi-bridge-standalone
+wget https://raw.githubusercontent.com/ruteclrp/dvi-bridge-standalone/main/bridge_assets/dvi-installation-scripts.rpi.tar.gz
+tar -xzf dvi-installation-scripts-v6.21.rpi.tar.gz
+cd installation-scripts
+chmod +x install.sh
 ```
 
-### 3. Create the Python virtual environment
+### 2. Install the bridge RPi
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+./install.sh
 ```
+When prompted, press Enter for latest release or the number of a previous release (1-10)
 
-### 4. Configure MQTT environment if you run against a Home Assistant device
+When prompted, select the install mode:
+1 for basic bridge install w/o sidecar standalone webserver
+2 for bridge + sidecar
+3 for full package
 
-Copy the example environment file and edit it with your broker settings:
+When prompted, edit the .env in nano and fill in the mqtt host IP, mqtt user and mqtt password
+Ctrl-o and Enter for save, Ctrl-x for exit to script completion
 
-```bash
-cp .env.example .env
-nano .env
-```
+When the install is complete, the bridge service should be running and you will be prompted to check its status.
 
-Example `.env`:
+If sidecar is also installed, the webbridge service will also be running and you will be prompted to check its status.
 
-  MQTT_HOST=192.168.x.xxx
-  MQTT_PORT=1883
-
-  # Optional: only set these if your MQTT broker requires authentication.
-  # If left empty, the bridge will connect without username/password.
-  MQTT_USER=
-  MQTT_PASS=
-
-  # Optional: replace with your specific model e.g. LV7, LV9, LV12, LV16
-  # This is used to set correct topics and units (default is LV) - will be used in future updates
-  HEATPUMP_MODEL=LV
-
-Leave `MQTT_USER` / `MQTT_PASS` empty if your broker does not require authentication.
-
-### 5. Test the bridge manually
-
-```bash
-cd dvi-bridge-standalone
-source .venv/bin/activate
-python bridge.py
-```
-
-You should see something like:
-
-```text
-✅ Connected to MQTT broker
-```
-
-If everything is OK, the bridge will start polling the heatpump and publish JSON payloads on the topic:
-
-```text
-dvi/measurement
-```
-You may receive an error due to the dviha user not being member of the dialout group giving access to the /dev/ttyACM0 (or whatever oterh ttyAxxx port name it has).
+You may see an error in the bridge service due to the dviha user not being member of the dialout group giving access to the /dev/ttyACM0 (or whatever other ttyAxxx port name it has).
 
 If that happens:
 Step 1: Check which group owns the device
@@ -95,73 +55,28 @@ Step 1: Check which group owns the device
 ls -l /dev/ttyACM0 - and you should see something like this: crw-rw---- 1 root dialout 166, 0 ... /dev/ttyACM0
 ```
 Step 2: Add your user to the dialout group
-```BASH
+```bash
 sudo usermod -aG dialout dviha
 ```
 Step 3: Log out and back in
 
-Test again manually
-
-Home Assistant will also receive MQTT discovery messages so entities are created automatically.
-### 6. Running the bridge as standalone with sidecar
-
-Test the sidecar
+Start the bridge service manually
 ```bash
-cd dvi-bridge-standalone
-source .venv/bin/activate
-python webbridge.py
+sudo systemctl start webbridge.service
+sudo journalctl -u bridge.service -f
 ```
 
+Home Assistant will receive MQTT discovery messages so entities are created automatically.
 
-### 7. Install the systemd service (auto‑start on boot)
-
-Copy the example service files and edit them:
-If you run against HA you should only setup the systemd for running bridge.py
-
-If you run locally with sidecar and web access you should setup a systemd for both bridge.py and webbridge.py
-
-```bash
-# Copy and customize the files
-cp systemd/bridge.service.example systemd/bridge.service
-cp systemd/webbridge.service.example systemd/webbridge.service
-
-# Edit both files to replace <user> with your actual username
-nano systemd/bridge.service
-nano systemd/webbridge.service
-
-# Copy to systemd
-sudo cp systemd/bridge.service /etc/systemd/system/
-sudo cp systemd/webbridge.service /etc/systemd/system/
-
-# Enable and start both services
-sudo systemctl daemon-reload
-sudo systemctl enable bridge.service webbridge.service
-sudo systemctl start bridge.service webbridge.service
-
-# Check status
-sudo systemctl status bridge.service webbridge.service
-
-```
+---------------------------------------------------------------------------------------------------------------------------------
 
 If you chose a different username than `dviha` when installing Raspberry Pi OS, remember to update the username in all the paths and examples in this guide.
 
-Reload systemd and enable the service:
+---------------------------------------------------------------------------------------------------------------------------------
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable bridge.service
-sudo systemctl start bridge.service
-```
+When the bridge is **active (running)** and your USB connection + Modbus wiring are correct, the heatpump data should be visible in Home Assistant via MQTT discovery.
 
-You can check the status with:
-
-```bash
-sudo systemctl status bridge.service
-```
-
-When it is **active (running)** and your USB connection + Modbus wiring are correct, the heatpump data should be visible in Home Assistant via MQTT discovery.
-
-When you run the sidecar standalone application webbridge.py you can access the heatpump via a browser on http://<IPof your bridge computer>:5000
+When you run the sidecar standalone application webbridge.py you can access the heatpump via a browser on http://<IP of your bridge computer>:5000
 ---
 
 ## B. Home Assistant MQTT Entities
@@ -229,7 +144,7 @@ Click **Add**.
 ### 3. Install the card  
 Go to **HACS → Frontend**, find:
 
-**“DVI LV Heatpump Card”**
+**“DVI Heatpump Card”**
 
 Click **Download**.  
 HACS installs everything automatically into:
@@ -248,18 +163,18 @@ Press **Ctrl+F5** (or full refresh on mobile) to ensure the new card files load.
 1. Open any dashboard  
 2. Click **Edit dashboard**  
 3. Click **Add card**  
-4. Select **DVI LV Heatpump Card**
+4. Select **DVI Heatpump Card**
 
 ### Automatic configuration (no YAML needed)
 When adding the card in Lovelace, a full configuration UI appears.
 
-1. Select your DVI LV MQTT device from the dropdown.
+1. Select your DVI MQTT device from the dropdown.
 2. The card automatically detects all related entities on that device.
 3. All fields are mapped instantly — no manual configuration required.
 
 The auto-mapping includes:
 
-* Heatpump state (Stand by / On)
+* Heatpump state (Stand-by / On)
 * CV mode
 * VV mode
 * CV night mode
@@ -300,7 +215,9 @@ browser_mod:
   - VV mode + schedule indicator  
   - AUX heating status  
   - Info chip showing EM23 power (if installed)
-- Popups for Info, CV, VV, AUX  
+  - Heatpump state (On/St-by)
+- Popups for Info, CV, VV, AUX, On/St-by
+- Special popup for setting the heat curve, with automatic configuration of setpoints for Floor heating w or w/o shunt, or radiator 
 - Buttons for:
   - CV/VV ON/OFF  
   - CV night mode (Timer / Day / Night)  

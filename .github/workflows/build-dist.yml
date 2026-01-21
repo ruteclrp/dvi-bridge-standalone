@@ -240,8 +240,8 @@ jobs:
           cp README.md release/installation-scripts/
           cp LICENSE release/installation-scripts/ || true
           
-          # Package it
-          tar czf release/dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz -C release installation-scripts
+          # Package it (no version in filename - will be placed in root bridge_assets/)
+          tar czf release/dvi-installation-scripts.rpi.tar.gz -C release installation-scripts
           
           echo "== Installation scripts package =="
           find release/installation-scripts -type f -print
@@ -257,11 +257,16 @@ jobs:
           # Switch to the branch
           git checkout $BRANCH
           
-          # Create versioned folder for RPi packages
+          # Create versioned folder for RPi packages (excluding installation scripts)
           mkdir -p bridge_assets/$VERSION
           
-          # Copy tarballs to versioned folder
-          cp release/*.rpi.tar.gz bridge_assets/$VERSION/
+          # Copy versioned tarballs to versioned folder (exclude installation scripts)
+          cp release/dvi-bridge-basic-$VERSION.rpi.tar.gz bridge_assets/$VERSION/
+          cp release/dvi-sidecar-$VERSION.rpi.tar.gz bridge_assets/$VERSION/
+          cp release/dvi-complete-runtime-$VERSION.rpi.tar.gz bridge_assets/$VERSION/
+          
+          # Copy installation scripts to root bridge_assets/ (always overwrites)
+          cp release/dvi-installation-scripts.rpi.tar.gz bridge_assets/
           
           # Create README for this version
           cat > bridge_assets/$VERSION/README.md << EOF
@@ -272,7 +277,10 @@ jobs:
           - **dvi-bridge-basic-$VERSION.rpi.tar.gz** - MQTT bridge only
           - **dvi-sidecar-$VERSION.rpi.tar.gz** - Web interface (requires bridge)
           - **dvi-complete-runtime-$VERSION.rpi.tar.gz** - Complete all-in-one package
-          - **dvi-installation-scripts-$VERSION.rpi.tar.gz** - Installation scripts
+          
+          ## Installation Scripts
+          
+          Installation scripts are available in [bridge_assets/dvi-installation-scripts.rpi.tar.gz](../dvi-installation-scripts.rpi.tar.gz) (always latest version).
           
           ## Download
           

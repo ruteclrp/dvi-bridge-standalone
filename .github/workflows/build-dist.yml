@@ -158,7 +158,7 @@ jobs:
           cp -r src/sidecar/www/* release/sidecar-package/sidecar/www/
 
           # Add the card files for sidecar UI
-          cp src/dvi-card/dvi-heatpump-card.js release/sidecar-package/sidecar/www/
+          cp src/dvi-card/dvi-heatpump-card.js release/sidecar-package/sidecar/www/dvi-card/
           cp -r src/dvi-card/dvi release/sidecar-package/sidecar/www/dvi-card/
 
           # systemd service file for sidecar
@@ -206,7 +206,7 @@ jobs:
           cp src/sidecar/webbridge.py release/complete-runtime/sidecar/
           cp src/sidecar/entity_map.py release/complete-runtime/sidecar/
           cp -r src/sidecar/www/* release/complete-runtime/sidecar/www/
-          cp src/dvi-card/dvi-heatpump-card.js release/complete-runtime/sidecar/www/
+          cp src/dvi-card/dvi-heatpump-card.js release/complete-runtime/sidecar/www/dvi-card/
           cp -r src/dvi-card/dvi release/complete-runtime/sidecar/www/dvi-card/
 
           # Version file

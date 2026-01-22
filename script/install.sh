@@ -134,6 +134,6 @@ echo "Location: $RELEASE_DIR"
 
 if [ "$INSTALL_SIDECAR" = true ]; then
   echo ""
-  echo "Web interface available at: http://$(hostname -I | awk '{print $1}'):5555"
+  echo "Web interface available at: http://$(hostname -I | awk '{print $1}'):5000"
 fi
 ```

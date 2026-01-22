@@ -158,7 +158,7 @@ jobs:
           cp -r src/sidecar/www/* release/sidecar-package/sidecar/www/
 
           # Add the card files for sidecar UI
-          cp src/dvi-card/dvi-heatpump-card.js release/sidecar-package/sidecar/www/dvi-card/
+          cp src/dvi-card/dvi-heatpump-card.js release/sidecar-package/sidecar/www/
           cp -r src/dvi-card/dvi release/sidecar-package/sidecar/www/dvi-card/
 
           # systemd service file for sidecar
@@ -206,7 +206,7 @@ jobs:
           cp src/sidecar/webbridge.py release/complete-runtime/sidecar/
           cp src/sidecar/entity_map.py release/complete-runtime/sidecar/
           cp -r src/sidecar/www/* release/complete-runtime/sidecar/www/
-          cp src/dvi-card/dvi-heatpump-card.js release/complete-runtime/sidecar/www/dvi-card/
+          cp src/dvi-card/dvi-heatpump-card.js release/complete-runtime/sidecar/www/
           cp -r src/dvi-card/dvi release/complete-runtime/sidecar/www/dvi-card/
 
           # Version file
@@ -240,8 +240,8 @@ jobs:
           cp README.md release/installation-scripts/
           cp LICENSE release/installation-scripts/ || true
           
-          # Package it
-          tar czf release/dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz -C release installation-scripts
+          # Package it (no version in filename - will be placed in root bridge_assets/)
+          tar czf release/dvi-installation-scripts.rpi.tar.gz -C release installation-scripts
           
           echo "== Installation scripts package =="
           find release/installation-scripts -type f -print
@@ -257,11 +257,16 @@ jobs:
           # Switch to the branch
           git checkout $BRANCH
           
-          # Create versioned folder for RPi packages
+          # Create versioned folder for RPi packages (excluding installation scripts)
           mkdir -p bridge_assets/$VERSION
           
-          # Copy tarballs to versioned folder
-          cp release/*.rpi.tar.gz bridge_assets/$VERSION/
+          # Copy versioned tarballs to versioned folder (exclude installation scripts)
+          cp release/dvi-bridge-basic-$VERSION.rpi.tar.gz bridge_assets/$VERSION/
+          cp release/dvi-sidecar-$VERSION.rpi.tar.gz bridge_assets/$VERSION/
+          cp release/dvi-complete-runtime-$VERSION.rpi.tar.gz bridge_assets/$VERSION/
+          
+          # Copy installation scripts to root bridge_assets/ (always overwrites)
+          cp release/dvi-installation-scripts.rpi.tar.gz bridge_assets/
           
           # Create README for this version
           cat > bridge_assets/$VERSION/README.md << EOF
@@ -272,7 +277,10 @@ jobs:
           - **dvi-bridge-basic-$VERSION.rpi.tar.gz** - MQTT bridge only
           - **dvi-sidecar-$VERSION.rpi.tar.gz** - Web interface (requires bridge)
           - **dvi-complete-runtime-$VERSION.rpi.tar.gz** - Complete all-in-one package
-          - **dvi-installation-scripts-$VERSION.rpi.tar.gz** - Installation scripts
+          
+          ## Installation Scripts
+          
+          Installation scripts are available in [bridge_assets/dvi-installation-scripts.rpi.tar.gz](../dvi-installation-scripts.rpi.tar.gz) (always latest version).
           
           ## Download
           
@@ -283,8 +291,9 @@ jobs:
           See the main [README](../../README.md) for installation instructions.
           EOF
           
-          # Add to git
+          # Add to git (both versioned folder and root scripts package)
           git add bridge_assets/$VERSION/
+          git add bridge_assets/dvi-installation-scripts.rpi.tar.gz
           
           # Commit if there are changes
           if ! git diff --staged --quiet; then

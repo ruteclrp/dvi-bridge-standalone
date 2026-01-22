@@ -23,7 +23,7 @@ The repository is designed so both parts can live in the same project (bridge + 
 ```bash
 cd /home/dviha
 wget https://raw.githubusercontent.com/ruteclrp/dvi-bridge-standalone/main/bridge_assets/dvi-installation-scripts.rpi.tar.gz
-tar -xzf dvi-installation-scripts-v6.21.rpi.tar.gz
+tar -xzf dvi-installation-scripts.rpi.tar.gz
 cd installation-scripts
 chmod +x install.sh
 ```
@@ -47,9 +47,14 @@ When the install is complete, the bridge service should be running and you will 
 
 If sidecar is also installed, the webbridge service will also be running and you will be prompted to check its status.
 
-You may see an error in the bridge service due to the dviha user not being member of the dialout group giving access to the /dev/ttyACM0 (or whatever other ttyAxxx port name it has).
+You may see an error, or just that the status of the service is stalled, in the bridge service due to the dviha user not being member of the dialout group giving access to the /dev/ttyACM0 (or whatever other ttyAxxx port name it has).
 
 If that happens:
+
+stop the hanging bridge.service
+```bash
+sudo systemctl stop bridge.service
+```
 Step 1: Check which group owns the device
 ```bash
 ls -l /dev/ttyACM0 - and you should see something like this: crw-rw---- 1 root dialout 166, 0 ... /dev/ttyACM0
@@ -62,9 +67,10 @@ Step 3: Log out and back in
 
 Start the bridge service manually
 ```bash
-sudo systemctl start webbridge.service
+sudo systemctl start bridge.service
 sudo journalctl -u bridge.service -f
 ```
+The first start of the bridge.service may take a little while as it needs to fetch many data registers from the heatpump.
 
 Home Assistant will receive MQTT discovery messages so entities are created automatically.
 

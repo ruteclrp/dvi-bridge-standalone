@@ -1,50 +1,32 @@
 #!/bin/bash
-# QR-show.sh - Show current tunnel URL and QR code
-#
-# This script displays the current tunnel URL and generates a QR code.
-# It reads from the live tunnel_url.txt file or falls back to config.
+# QR-show.sh - Regenerate QR code for Cloudflare tunnel URL
 
 set -e  # Exit on any error
 
 echo "========================================="
-echo "DVI Bridge - Show Tunnel URL & QR Code"
+echo "DVI Bridge - Show QR Code"
 echo "========================================="
 
-# Try to read from live tunnel URL file first (most up-to-date)
-TUNNEL_URL_FILE="/var/run/dvi-bridge/tunnel_url.txt"
+# Check if config file exists
 CONFIG_FILE="/etc/dvi-bridge/tunnel.conf"
 
-TUNNEL_URL=""
-
-# Try runtime file first
-if [ -f "$TUNNEL_URL_FILE" ]; then
-    echo "Reading tunnel URL from runtime file..."
-    TUNNEL_URL=$(cat "$TUNNEL_URL_FILE" 2>/dev/null || echo "")
-fi
-
-# Fall back to config file
-if [ -z "$TUNNEL_URL" ] && [ -f "$CONFIG_FILE" ]; then
-    echo "Reading tunnel URL from configuration..."
-    source "$CONFIG_FILE"
-fi
-
-# Check if we got a URL
-if [ -z "$TUNNEL_URL" ]; then
-    echo "❌ No tunnel URL found"
-    echo ""
-    echo "Possible solutions:"
-    echo "  1. Check if cloudflared service is running:"
-    echo "     sudo systemctl status cloudflared.service"
-    echo "  2. Run the installation script:"
-    echo "     sudo ./Cloudflare-install.sh"
-    echo "  3. Use the management script:"
-    echo "     sudo manage-tunnel.sh url"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "❌ Configuration file not found: $CONFIG_FILE"
+    echo "   Please run Cloudflare-install.sh first"
     exit 1
 fi
 
+# Read tunnel URL from config
 echo ""
-echo "✅ Current Tunnel URL:"
-echo "   $TUNNEL_URL"
+echo "Reading tunnel configuration..."
+source "$CONFIG_FILE"
+
+if [ -z "$TUNNEL_URL" ]; then
+    echo "❌ No tunnel URL found in configuration"
+    exit 1
+fi
+
+echo "✅ Tunnel URL: $TUNNEL_URL"
 
 # Check if qrencode is available
 if ! command -v qrencode &> /dev/null; then

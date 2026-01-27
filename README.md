@@ -162,6 +162,54 @@ sudo systemctl status bridge.service
 When it is **active (running)** and your USB connection + Modbus wiring are correct, the heatpump data should be visible in Home Assistant via MQTT discovery.
 
 When you run the sidecar standalone application webbridge.py you can access the heatpump via a browser on http://<IPof your bridge computer>:5000
+
+### 8. Remote Access with Cloudflare Tunnel (Optional)
+
+**New Feature:** Automatic tunnel URL discovery for remote access!
+
+The DVI Bridge can now automatically manage a Cloudflare tunnel for secure remote access, with automatic URL updates that your mobile app can discover:
+
+```bash
+cd /home/dviha/dvi-bridge-standalone/script
+sudo ./Cloudflare-install.sh
+```
+
+This will:
+- ✅ Install and configure cloudflared
+- ✅ Create a secure tunnel with automatic restart
+- ✅ Set up monitoring and URL tracking
+- ✅ Enable automatic URL discovery for mobile apps
+- ✅ Generate QR code for easy mobile setup
+
+**Key Features:**
+- **Automatic URL Updates**: When the tunnel restarts, the new URL is automatically tracked
+- **HTTP API Endpoint**: Mobile apps can fetch the latest tunnel URL via `/api/tunnel`
+- **mDNS Integration**: Tunnel URL is broadcast via mDNS for local discovery
+- **Self-Healing**: Tunnel automatically restarts if it fails
+- **Easy Management**: Use `sudo manage-tunnel.sh status` to check tunnel status
+
+**Management Commands:**
+```bash
+# Show status and current URL
+sudo manage-tunnel.sh status
+
+# Show URL and QR code
+sudo manage-tunnel.sh url
+
+# Restart tunnel
+sudo manage-tunnel.sh restart
+
+# View logs
+sudo manage-tunnel.sh logs
+```
+
+**For Mobile App Users:**
+- On home network: App automatically discovers latest tunnel URL
+- Remote access: Use the tunnel URL or scan the QR code
+- No need to manually update URL when tunnel changes!
+
+📖 **Detailed Documentation:** See [TUNNEL_DISCOVERY.md](TUNNEL_DISCOVERY.md) for complete setup, troubleshooting, and API documentation.
+
 ---
 
 ## B. Home Assistant MQTT Entities

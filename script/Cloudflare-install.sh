@@ -173,11 +173,184 @@ echo ""
 echo "Tunnel URL: $TUNNEL_URL"
 echo "Tunnel PID: $TUNNEL_PID"
 echo ""
-echo "Next steps:"
-echo "  - Scan QR code with mobile app (if shown above)"
-echo "  - Or use auto-discovery on local WiFi"
-echo "  - Access via: $TUNNEL_URL"
+
+# Now set up systemd services for permanent installation
+echo "========================================="
+echo "Setting up systemd services..."
+echo "========================================="
 echo ""
-echo "Note: Tunnel is running in background (PID $TUNNEL_PID)"
-echo "      To stop: kill $TUNNEL_PID"
+
+# Stop the temporary tunnel
+echo "Stopping temporary tunnel (PID: $TUNNEL_PID)..."
+kill $TUNNEL_PID 2>/dev/null || true
+sleep 2
+
+# Install monitoring script
+echo "Step 9: Installing tunnel monitoring script..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if sudo install -m 755 "$SCRIPT_DIR/monitor-tunnel.sh" /usr/local/bin/; then
+    echo "✅ Monitoring script installed to /usr/local/bin/monitor-tunnel.sh"
+else
+    echo "❌ Failed to install monitoring script"
+    exit 1
+fi
+
+if sudo install -m 755 "$SCRIPT_DIR/manage-tunnel.sh" /usr/local/bin/; then
+    echo "✅ Management script installed to /usr/local/bin/manage-tunnel.sh"
+else
+    echo "❌ Failed to install management script"
+    exit 1
+fi
+
+# Create log directory
+echo ""
+echo "Step 10: Creating log directory..."
+if sudo mkdir -p /var/log/dvi-bridge /var/run/dvi-bridge; then
+    echo "✅ Directories created"
+else
+    echo "❌ Failed to create directories"
+    exit 1
+fi
+
+# Install systemd services
+echo ""
+echo "Step 11: Installing systemd services..."
+
+# Determine the project root (parent of script directory)
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Copy service files from src/systemd/
+CLOUDFLARED_SERVICE_SRC="$PROJECT_ROOT/src/systemd/cloudflared.service.example"
+TUNNEL_MONITOR_SERVICE_SRC="$PROJECT_ROOT/src/systemd/tunnel-monitor.service.example"
+
+if [ ! -f "$CLOUDFLARED_SERVICE_SRC" ]; then
+    echo "❌ cloudflared.service.example not found at: $CLOUDFLARED_SERVICE_SRC"
+    exit 1
+fi
+
+if [ ! -f "$TUNNEL_MONITOR_SERVICE_SRC" ]; then
+    echo "❌ tunnel-monitor.service.example not found at: $TUNNEL_MONITOR_SERVICE_SRC"
+    exit 1
+fi
+
+# Install cloudflared service
+if sudo cp "$CLOUDFLARED_SERVICE_SRC" /etc/systemd/system/cloudflared.service; then
+    echo "✅ cloudflared.service installed"
+else
+    echo "❌ Failed to install cloudflared.service"
+    exit 1
+fi
+
+# Install tunnel monitor service
+if sudo cp "$TUNNEL_MONITOR_SERVICE_SRC" /etc/systemd/system/tunnel-monitor.service; then
+    echo "✅ tunnel-monitor.service installed"
+else
+    echo "❌ Failed to install tunnel-monitor.service"
+    exit 1
+fi
+
+# Reload systemd
+echo ""
+echo "Step 12: Reloading systemd..."
+if sudo systemctl daemon-reload; then
+    echo "✅ Systemd reloaded"
+else
+    echo "❌ Failed to reload systemd"
+    exit 1
+fi
+
+# Enable and start services
+echo ""
+echo "Step 13: Enabling and starting services..."
+
+if sudo systemctl enable cloudflared.service; then
+    echo "✅ cloudflared.service enabled (will start on boot)"
+else
+    echo "❌ Failed to enable cloudflared.service"
+fi
+
+if sudo systemctl enable tunnel-monitor.service; then
+    echo "✅ tunnel-monitor.service enabled (will start on boot)"
+else
+    echo "❌ Failed to enable tunnel-monitor.service"
+fi
+
+echo ""
+echo "Starting services..."
+
+if sudo systemctl start cloudflared.service; then
+    echo "✅ cloudflared.service started"
+else
+    echo "❌ Failed to start cloudflared.service"
+    exit 1
+fi
+
+# Wait a moment for cloudflared to start
+sleep 3
+
+if sudo systemctl start tunnel-monitor.service; then
+    echo "✅ tunnel-monitor.service started"
+else
+    echo "⚠️  tunnel-monitor.service failed to start (non-critical)"
+fi
+
+# Wait for new tunnel URL
+echo ""
+echo "⏳ Waiting for tunnel to establish (this may take 10-30 seconds)..."
+COUNTER=0
+TIMEOUT=60
+NEW_TUNNEL_URL=""
+
+while [ $COUNTER -lt $TIMEOUT ]; do
+    if [ -f "/var/run/dvi-bridge/tunnel_url.txt" ]; then
+        NEW_TUNNEL_URL=$(cat /var/run/dvi-bridge/tunnel_url.txt 2>/dev/null || echo "")
+        if [ -n "$NEW_TUNNEL_URL" ]; then
+            break
+        fi
+    fi
+    sleep 1
+    COUNTER=$((COUNTER + 1))
+    echo -n "."
+done
+echo ""
+
+if [ -z "$NEW_TUNNEL_URL" ]; then
+    echo "⚠️  Tunnel URL not available yet, but service is running"
+    echo "   Check status with: sudo systemctl status cloudflared.service"
+    echo "   Or use: sudo /usr/local/bin/manage-tunnel.sh status"
+    NEW_TUNNEL_URL="$TUNNEL_URL"  # Use old URL as fallback
+else
+    echo "✅ New tunnel URL: $NEW_TUNNEL_URL"
+fi
+
+echo ""
+echo "========================================="
+echo "✅ Installation Complete!"
+echo "========================================="
+echo ""
+echo "Tunnel URL: $NEW_TUNNEL_URL"
+echo ""
+echo "Tunnel is now running as a system service and will:"
+echo "  ✅ Start automatically on boot"
+echo "  ✅ Restart automatically if it crashes"
+echo "  ✅ Update URL automatically when it changes"
+echo "  ✅ Expose URL via /api/tunnel endpoint"
+echo ""
+echo "Management commands:"
+echo "  sudo /usr/local/bin/manage-tunnel.sh status   - Show status"
+echo "  sudo /usr/local/bin/manage-tunnel.sh url      - Show URL & QR code"
+echo "  sudo /usr/local/bin/manage-tunnel.sh restart  - Restart tunnel"
+echo "  sudo /usr/local/bin/manage-tunnel.sh logs     - View logs"
+echo ""
+echo "Service commands:"
+echo "  sudo systemctl status cloudflared           - Check service status"
+echo "  sudo systemctl restart cloudflared          - Restart service"
+echo "  sudo journalctl -u cloudflared -f           - View live logs"
+echo ""
+echo "Next steps:"
+echo "  - Mobile app will auto-discover tunnel URL via /api/tunnel"
+echo "  - Scan QR code for remote access setup"
+echo "  - Test the API: curl http://localhost:5000/api/tunnel"
+echo ""
 echo "========================================="

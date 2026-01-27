@@ -1,0 +1,30 @@
+[Unit]
+Description=Cloudflare Tunnel for DVI Bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/cloudflared tunnel --url http://localhost:5000 --logfile /var/log/dvi-bridge/cloudflared.log
+Restart=always
+RestartSec=10
+StandardOutput=append:/var/log/dvi-bridge/cloudflared.log
+StandardError=append:/var/log/dvi-bridge/cloudflared.log
+
+# Resource limits
+MemoryLimit=256M
+CPUQuota=50%
+
+# Health check: restart if process fails
+StartLimitInterval=300
+StartLimitBurst=5
+
+# User/Group (run as root or dedicated user)
+User=root
+Group=root
+
+# Working directory
+WorkingDirectory=/var/run/dvi-bridge
+
+[Install]
+WantedBy=multi-user.target

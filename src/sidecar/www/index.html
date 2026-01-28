@@ -16,6 +16,31 @@
 
 
 <body style="margin:0; background:#111;">
+  <!-- Login Modal -->
+  <div id="login-overlay" class="login-overlay">
+    <div class="login-modal">
+      <div class="login-header">
+        <h2>DVI Heatpump</h2>
+        <p>Authentication required</p>
+      </div>
+      <div id="login-error" class="login-error" style="display:none;"></div>
+      <form id="login-form" class="login-form">
+        <div class="login-form-group">
+          <label for="login-username">Username</label>
+          <input type="text" id="login-username" name="username" autocomplete="username" required>
+        </div>
+        <div class="login-form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+        </div>
+        <button type="submit" id="login-button" class="login-button">
+          <span id="login-button-text">Login</span>
+          <div id="login-spinner" class="login-spinner" style="display:none;"></div>
+        </button>
+      </form>
+    </div>
+  </div>
+
   <!-- Modal Popup -->
   <div id="modal-overlay" class="modal-overlay">
     <div class="modal-content">

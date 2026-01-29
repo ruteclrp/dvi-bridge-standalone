@@ -6,8 +6,14 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-AUTH_MODULE="$PROJECT_ROOT/src/sidecar/auth.py"
+AUTH_MODULE="$PROJECT_ROOT/dvi-bridge/sidecar/auth.py"
 AUTH_CONFIG="/etc/dvi-bridge/auth.json"
+
+# Activate virtual environment if it exists
+if [ -d "$PROJECT_ROOT/dvi-bridge/venv" ]; then
+    source "$PROJECT_ROOT/dvi-bridge/venv/bin/activate"
+    echo "Activated virtual environment at $PROJECT_ROOT/dvi-bridge/venv"
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -45,7 +51,7 @@ if ! python3 -c "import bcrypt" 2>/dev/null; then
     echo -e "${YELLOW}⚠️  bcrypt module not installed${NC}"
     echo -e "${BLUE}📦 Installing bcrypt...${NC}"
     
-    cd "$PROJECT_ROOT/src/sidecar"
+    cd "$PROJECT_ROOT/dvi-bridge/sidecar"
     pip3 install bcrypt || {
         echo -e "${RED}❌ Failed to install bcrypt${NC}"
         exit 1
@@ -85,7 +91,7 @@ case $choice in
         mkdir -p "$(dirname "$AUTH_CONFIG")"
         
         # Run the password change tool
-        cd "$PROJECT_ROOT/src/sidecar"
+        cd "$PROJECT_ROOT/dvi-bridge/sidecar"
         python3 "$AUTH_MODULE" --set-password
         
         # Set proper permissions
@@ -140,7 +146,7 @@ EOF
         echo ""
         read -p "Enter choice [1-4]: " auth_choice
         
-        cd "$PROJECT_ROOT/src/sidecar"
+        cd "$PROJECT_ROOT/dvi-bridge/sidecar"
         python3 << EOF
 import json
 with open("$AUTH_CONFIG") as f:

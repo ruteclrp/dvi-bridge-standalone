@@ -3,20 +3,10 @@ import os
 import threading
 import time
 import tempfile
-import secrets
 
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request
 
 from entity_map import ENTITY_MAP
-from auth import (
-    require_auth_if_tunnel,
-    verify_password,
-    check_rate_limit,
-    record_login_attempt,
-    get_client_ip,
-    is_tunnel_request,
-    load_auth_config
-)
 
 # -----------------------------------------------------------------------------
 # Configuration
@@ -111,12 +101,6 @@ print(f"✅ Reading state from {STATE_PATH}")
 
 app = Flask(__name__, static_folder=WWW_DIR, static_url_path="")
 
-# Session configuration for authentication
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', secrets.token_hex(32))
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['PERMANENT_SESSION_LIFETIME'] = 86400  # 24 hours
-
 # Disable caching for development
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
 
@@ -133,7 +117,6 @@ def index():
     return app.send_static_file("index.html")
 
 @app.route("/api/states")
-@require_auth_if_tunnel
 def api_states():
     with state_lock:
         states_copy = states.copy()
@@ -157,7 +140,6 @@ def api_states():
         return jsonify(states_copy)
 
 @app.route("/api/pump_type")
-@require_auth_if_tunnel
 def api_pump_type():
     """Return the detected pump type (AW or BW)"""
     # TESTING OVERRIDE: Uncomment the next line to force BW mode in frontend
@@ -215,107 +197,7 @@ def api_tunnel():
             'message': str(e)
         }), 503
 
-@app.route("/api/auth/login", methods=["POST"])
-def api_auth_login():
-    """Handle login requests from browser (tunnel access)
-    
-    Mobile app should use HTTP Basic Auth instead.
-    This endpoint creates a session for browser-based access.
-    
-    Request body:
-        {
-            "username": "admin",
-            "password": "password"
-        }
-    
-    Returns:
-        200: {"success": true, "message": "Logged in"}
-        401: {"error": "Invalid credentials"}
-        429: {"error": "Too many attempts", "retry_after": 600}
-    """
-    try:
-        # Rate limiting
-        client_ip = get_client_ip()
-        allowed, wait_time = check_rate_limit(client_ip)
-        
-        if not allowed:
-            return jsonify({
-                "error": "Too many login attempts",
-                "retry_after": wait_time
-            }), 429
-        
-        # Get credentials from request
-        data = request.get_json() or {}
-        username = data.get("username", "").strip()
-        password = data.get("password", "")
-        
-        if not username or not password:
-            record_login_attempt(client_ip)
-            return jsonify({"error": "Username and password required"}), 400
-        
-        # Verify credentials
-        if verify_password(username, password):
-            # Create session
-            session.permanent = True
-            session['authenticated'] = True
-            session['username'] = username
-            
-            print(f"✅ User '{username}' logged in from {client_ip}")
-            return jsonify({
-                "success": True,
-                "message": "Logged in successfully"
-            })
-        else:
-            # Record failed attempt
-            record_login_attempt(client_ip)
-            print(f"⚠️ Failed login attempt for '{username}' from {client_ip}")
-            return jsonify({"error": "Invalid credentials"}), 401
-    
-    except Exception as e:
-        print(f"❌ Login error: {e}")
-        return jsonify({"error": "Login failed"}), 500
-
-@app.route("/api/auth/logout", methods=["POST"])
-def api_auth_logout():
-    """Handle logout requests
-    
-    Clears the session cookie.
-    """
-    session.clear()
-    return jsonify({"success": True, "message": "Logged out"})
-
-@app.route("/api/auth/status")
-def api_auth_status():
-    """Check authentication status
-    
-    Returns:
-        {
-            "authenticated": true/false,
-            "tunnel_request": true/false,
-            "auth_required": true/false,
-            "username": "admin" (if authenticated)
-        }
-    """
-    from auth import is_authenticated
-    
-    config = load_auth_config()
-    tunnel = is_tunnel_request()
-    auth_required = tunnel and config.get("require_auth", True)
-    authenticated = is_authenticated() if auth_required else True
-    
-    response = {
-        "authenticated": authenticated,
-        "tunnel_request": tunnel,
-        "auth_required": auth_required
-    }
-    
-    if authenticated and session.get('username'):
-        response["username"] = session.get('username')
-    
-    return jsonify(response)
-
 @app.route("/api/history/<sensor_name>")
-@require_auth_if_tunnel
 def api_history(sensor_name):
     """Serve 24-hour history for a specific sensor"""
     try:
@@ -356,7 +238,6 @@ def api_history(sensor_name):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/services/<domain>/<service>", methods=["POST"])
-@require_auth_if_tunnel
 def api_service(domain, service):
     """Handle service calls from the web interface for all selects and numbers"""
     try:

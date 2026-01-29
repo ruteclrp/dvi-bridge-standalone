@@ -3,50 +3,9 @@ import "../dvi-card/dvi/heat_curve_card.js";
 import "../dvi-card/dvi/history_card.js";
 import { HassAdapter } from "../hass-adapter.js";
 
-// Authentication state
-let isInitialLoad = true;
-
 window.addEventListener("DOMContentLoaded", async () => {
-  setupLoginHandler();
-  
-  // Check authentication status
-  const authRequired = await checkAuthStatus();
-  
-  if (authRequired) {
-    showLoginModal();
-    return; // Wait for successful login
-  }
-  
-  // Initialize app
-  await initializeApp();
-});
-
-async function checkAuthStatus() {
-  try {
-    const res = await fetch("/api/auth/status");
-    const status = await res.json();
-    
-    // If authentication is required and not authenticated, show login
-    return status.auth_required && !status.authenticated;
-  } catch (error) {
-    console.error("Failed to check auth status:", error);
-    return false;
-  }
-}
-
-async function initializeApp() {
   const hass = new HassAdapter();
-  
-  try {
-    await hass.refresh();
-  } catch (error) {
-    if (error.message === "Authentication required") {
-      showLoginModal();
-      return;
-    }
-    console.error("Failed to initialize:", error);
-    return;
-  }
+  await hass.refresh();
 
   const card = document.createElement("dvi-heatpump-card");
   card.setConfig({
@@ -104,94 +63,10 @@ async function initializeApp() {
   }, 100);
 
   setInterval(async () => {
-    try {
-      await hass.refresh();
-      card.hass = hass;
-    } catch (error) {
-      if (error.message === "Authentication required") {
-        // Session expired, show login again
-        showLoginModal();
-      }
-    }
+    await hass.refresh();
+    card.hass = hass;
   }, 2000);
-}
-
-// Authentication UI handlers
-function setupLoginHandler() {
-  const loginForm = document.getElementById("login-form");
-  const loginOverlay = document.getElementById("login-overlay");
-  const loginError = document.getElementById("login-error");
-  const loginButton = document.getElementById("login-button");
-  const loginButtonText = document.getElementById("login-button-text");
-  const loginSpinner = document.getElementById("login-spinner");
-  
-  // Make showLoginModal globally available
-  window.showLoginModal = () => {
-    loginOverlay.classList.add("active");
-    document.getElementById("login-username").focus();
-  };
-  
-  window.hideLoginModal = () => {
-    loginOverlay.classList.remove("active");
-    loginForm.reset();
-    loginError.style.display = "none";
-  };
-  
-  loginForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    
-    const username = document.getElementById("login-username").value;
-    const password = document.getElementById("login-password").value;
-    
-    // Show loading state
-    loginButton.disabled = true;
-    loginButtonText.style.display = "none";
-    loginSpinner.style.display = "block";
-    loginError.style.display = "none";
-    
-    try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password })
-      });
-      
-      const data = await res.json();
-      
-      if (res.ok) {
-        // Login successful
-        window.hideLoginModal();
-        
-        // Initialize or reload app
-        if (isInitialLoad) {
-          isInitialLoad = false;
-          await initializeApp();
-        } else {
-          // Reload page to refresh state
-          window.location.reload();
-        }
-      } else {
-        // Show error
-        loginError.textContent = data.error || "Login failed";
-        loginError.style.display = "block";
-        
-        if (data.retry_after) {
-          const minutes = Math.ceil(data.retry_after / 60);
-          loginError.textContent += `. Try again in ${minutes} minute(s).`;
-        }
-      }
-    } catch (error) {
-      console.error("Login error:", error);
-      loginError.textContent = "Connection failed. Please try again.";
-      loginError.style.display = "block";
-    } finally {
-      // Reset button state
-      loginButton.disabled = false;
-      loginButtonText.style.display = "block";
-      loginSpinner.style.display = "none";
-    }
-  });
-}
+});
 
 function applyChartDarkMode() {
   if (!window.Chart || window.Chart._darkModePatched) return;

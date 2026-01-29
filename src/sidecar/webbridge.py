@@ -19,7 +19,6 @@ HTTP_PORT = 5000
 
 STATE_PATH = "./../state.json"
 COMMANDS_PATH = "./../commands.json"
-TUNNEL_URL_PATH = "/var/run/dvi-bridge/tunnel_url.txt"
 STATE_POLL_INTERVAL = 1.0  # seconds
 
 # -----------------------------------------------------------------------------
@@ -146,56 +145,6 @@ def api_pump_type():
     # return jsonify({"pump_type": "BW"})
     return jsonify({"pump_type": pump_type})
 
-@app.route("/api/tunnel")
-def api_tunnel():
-    """Return the current cloudflared tunnel URL
-    
-    This endpoint enables automatic tunnel URL discovery by the mobile app.
-    When the tunnel is recreated, the monitoring script updates the tunnel_url.txt file,
-    and the app can fetch the latest URL by calling this endpoint.
-    
-    Returns:
-        200: {"tunnel_url": "https://...", "status": "active"}
-        503: {"status": "unavailable", "message": "..."}
-    """
-    try:
-        # Try to read tunnel URL from file
-        if os.path.exists(TUNNEL_URL_PATH):
-            with open(TUNNEL_URL_PATH, 'r') as f:
-                tunnel_url = f.read().strip()
-            
-            if tunnel_url:
-                return jsonify({
-                    'tunnel_url': tunnel_url,
-                    'status': 'active'
-                }), 200
-        
-        # Fallback: Try to read from config file
-        config_path = '/etc/dvi-bridge/tunnel.conf'
-        if os.path.exists(config_path):
-            with open(config_path, 'r') as f:
-                for line in f:
-                    if line.startswith('TUNNEL_URL='):
-                        tunnel_url = line.split('=', 1)[1].strip()
-                        if tunnel_url:
-                            return jsonify({
-                                'tunnel_url': tunnel_url,
-                                'status': 'active',
-                                'source': 'config'
-                            }), 200
-        
-        # No tunnel URL found
-        return jsonify({
-            'status': 'unavailable',
-            'message': 'Tunnel is currently being established or not running'
-        }), 503
-        
-    except Exception as e:
-        print(f"⚠️ Failed to read tunnel URL: {e}")
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 503
 
 @app.route("/api/history/<sensor_name>")
 def api_history(sensor_name):

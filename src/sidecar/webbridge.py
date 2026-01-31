@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import threading
 import time
@@ -12,6 +13,7 @@ from entity_map import ENTITY_MAP
 # Configuration
 # -----------------------------------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] %(levelname)s %(message)s')
 WWW_DIR = os.path.join(BASE_DIR, "www")
 
 HTTP_HOST = "0.0.0.0"
@@ -132,12 +134,15 @@ def load_valid_token_hashes():
     Load valid token hashes from a file for persistence.
     """
     if not os.path.exists(TOKEN_HASHES_FILE):
+        logging.debug(f"Token hashes file not found: {TOKEN_HASHES_FILE}")
         return set()
     try:
         with open(TOKEN_HASHES_FILE, "r") as f:
             hashes = json.load(f)
+        logging.debug(f"Loaded token hashes: {hashes}")
         return set(hashes)
-    except Exception:
+    except Exception as e:
+        logging.error(f"Error loading token hashes: {e}")
         return set()
 
 def save_valid_token_hash(token_hash):
@@ -146,23 +151,17 @@ def save_valid_token_hash(token_hash):
     """
     hashes = load_valid_token_hashes()
     hashes.add(token_hash)
-    with open(TOKEN_HASHES_FILE, "w") as f:
-        json.dump(list(hashes), f, indent=2)
+    try:
+        with open(TOKEN_HASHES_FILE, "w") as f:
+            json.dump(list(hashes), f, indent=2)
+        logging.debug(f"Saved new token hash: {token_hash}")
+    except Exception as e:
+        logging.error(f"Error saving token hash: {e}")
 
 PUBLIC_PATHS = {
     "/pair",
     "/health",
 }
-
-def load_valid_token_hashes():
-    """
-    Load valid token hashes from a file or environment variable.
-    For demo, use a static set. Replace with secure storage in production.
-    """
-    return {
-        # Example SHA256 hashes of valid tokens
-        # 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    }
 
 def verify_token(token: str) -> bool:
     """
@@ -170,7 +169,9 @@ def verify_token(token: str) -> bool:
     Replace this with your real storage.
     """
     token_hash = hashlib.sha256(token.encode()).hexdigest()
-    return token_hash in load_valid_token_hashes()
+    valid = token_hash in load_valid_token_hashes()
+    logging.debug(f"Verifying token: {token[:6]}... hash: {token_hash}, valid: {valid}")
+    return valid
 
 @app.before_request
 def auth_middleware():
@@ -229,6 +230,7 @@ def pair():
     # Generate secure random token
     token = secrets.token_hex(32)
     token_hash = hashlib.sha256(token.encode()).hexdigest()
+    logging.debug(f"Generated new token: {token[:6]}... hash: {token_hash}")
     save_valid_token_hash(token_hash)
     return jsonify({"token": token})
 

@@ -98,7 +98,98 @@ print(f"✅ Reading state from {STATE_PATH}")
 # Flask app
 # -----------------------------------------------------------------------------
 
+
 app = Flask(__name__, static_folder=WWW_DIR, static_url_path="")
+
+# -----------------------------------------------------------------------------
+# Authentication Middleware
+# -----------------------------------------------------------------------------
+# This middleware protects the web interface when accessed via Cloudflare Zero Trust tunnel.
+#
+# - If the request hostname starts with "Owner-", authentication is required.
+#   The Owner's app must send an Authorization header: 'Bearer <token>'
+#   The token must be pre-shared and its SHA256 hash must be present in load_valid_token_hashes().
+# - If accessed via local network (hostname does not start with "Owner-"), no authentication is required.
+# - Endpoints listed in PUBLIC_PATHS are always accessible without authentication.
+#
+# To add a valid token:
+#   1. Generate a secure random token (e.g., with `openssl rand -hex 32`).
+#   2. Compute its SHA256 hash (e.g., `echo -n <token> | sha256sum`).
+#   3. Add the hash to the set returned by load_valid_token_hashes().
+#   4. Distribute the token securely to the Owner's app.
+#
+# To add a new public endpoint, add its path to the PUBLIC_PATHS set.
+
+import hashlib
+from flask import abort, g
+
+import secrets
+
+TOKEN_HASHES_FILE = os.path.join(BASE_DIR, "valid_token_hashes.json")
+
+def load_valid_token_hashes():
+    """
+    Load valid token hashes from a file for persistence.
+    """
+    if not os.path.exists(TOKEN_HASHES_FILE):
+        return set()
+    try:
+        with open(TOKEN_HASHES_FILE, "r") as f:
+            hashes = json.load(f)
+        return set(hashes)
+    except Exception:
+        return set()
+
+def save_valid_token_hash(token_hash):
+    """
+    Add a new token hash to the persistent file.
+    """
+    hashes = load_valid_token_hashes()
+    hashes.add(token_hash)
+    with open(TOKEN_HASHES_FILE, "w") as f:
+        json.dump(list(hashes), f, indent=2)
+
+PUBLIC_PATHS = {
+    "/pair",
+    "/health",
+}
+
+def load_valid_token_hashes():
+    """
+    Load valid token hashes from a file or environment variable.
+    For demo, use a static set. Replace with secure storage in production.
+    """
+    return {
+        # Example SHA256 hashes of valid tokens
+        # 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    }
+
+def verify_token(token: str) -> bool:
+    """
+    Check token against stored hashes.
+    Replace this with your real storage.
+    """
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    return token_hash in load_valid_token_hashes()
+
+@app.before_request
+def auth_middleware():
+    # Allow public endpoints
+    if request.path in PUBLIC_PATHS:
+        return
+
+    # Only require auth for Owner app via Cloudflare tunnel (hostname check)
+    host = request.host.split(":")[0]  # Remove port if present
+    if host.startswith("Owner-"):
+        auth = request.headers.get("Authorization", "")
+        if not auth.startswith("Bearer "):
+            abort(401)
+        token = auth.removeprefix("Bearer ").strip()
+        if not token or not verify_token(token):
+            abort(401)
+        # Optional: attach identity info
+        g.owner_authenticated = True
+    # If not Owner app, allow (local network, etc.)
 
 # Disable caching for development
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
@@ -114,6 +205,32 @@ def add_no_cache_headers(response):
 @app.route("/")
 def index():
     return app.send_static_file("index.html")
+
+
+# -----------------------------------------------------------------------------
+# Pairing Endpoint (local network only)
+# -----------------------------------------------------------------------------
+@app.route("/pair", methods=["POST"])
+def pair():
+    """
+    Allow pairing only from local network (not via Cloudflare tunnel/Owner-* hostnames).
+    Generates a new token, stores its hash, and returns the token to the app.
+    """
+    host = request.host.split(":")[0]
+    # Block if accessed via tunnel (Owner-* hostnames)
+    if host.startswith("Owner-"):
+        return jsonify({"error": "Pairing not allowed from tunnel"}), 403
+
+    # Optionally, restrict by IP (e.g., only allow RFC1918 private IPs)
+    # client_ip = request.remote_addr
+    # if not client_ip.startswith(("192.168.", "10.", "172.")):
+    #     return jsonify({"error": "Pairing only allowed from local network"}), 403
+
+    # Generate secure random token
+    token = secrets.token_hex(32)
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    save_valid_token_hash(token_hash)
+    return jsonify({"token": token})
 
 @app.route("/api/states")
 def api_states():

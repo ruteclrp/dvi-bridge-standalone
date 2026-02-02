@@ -216,15 +216,19 @@ def auth_middleware():
 
     # Only require auth for Owner app via Cloudflare tunnel (hostname check)
     host = request.host.split(":")[0]  # Remove port if present
-    if host.startswith("Owner-"):
+    if "-owner." in host.lower():
+        logging.debug(f"Tunnel access detected for host: {host}, path: {request.path}")
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
+            logging.warning(f"Missing or invalid Authorization header from {host}")
             abort(401)
         token = auth.removeprefix("Bearer ").strip()
         if not token or not verify_token(token):
+            logging.warning(f"Invalid token from {host}")
             abort(401)
         # Optional: attach identity info
         g.owner_authenticated = True
+        logging.debug(f"Successfully authenticated tunnel access to {request.path}")
     # If not Owner app, allow (local network, etc.)
 
 # Disable caching for development
@@ -253,8 +257,8 @@ def pair():
     Generates a new token, stores its hash, and returns the token to the app.
     """
     host = request.host.split(":")[0]
-    # Block if accessed via tunnel (Owner-* hostnames)
-    if host.startswith("Owner-"):
+    # Block if accessed via tunnel (owner hostnames contain -owner.)
+    if "-owner." in host.lower():
         return jsonify({"error": "Pairing not allowed from tunnel"}), 403
 
     # Optionally, restrict by IP (e.g., only allow RFC1918 private IPs)
@@ -268,6 +272,52 @@ def pair():
     logging.debug(f"Generated new token: {token[:6]}... hash: {token_hash}")
     save_valid_token_hash(token_hash)
     return jsonify({"token": token})
+
+
+# -----------------------------------------------------------------------------
+# Tunnel Info Endpoint (local network only)
+# -----------------------------------------------------------------------------
+@app.route("/api/tunnel", methods=["GET"])
+def api_tunnel():
+    """
+    Return tunnel URL for remote access.
+    This endpoint allows the Owner's app to discover the tunnel URL
+    when connected via local network.
+    
+    The app should first obtain a credential token via /pair endpoint,
+    then use this tunnel URL with that token for authenticated remote access.
+    """
+    host = request.host.split(":")[0]
+    
+    # Block access via tunnel (same security as /pair endpoint)
+    if "-owner." in host.lower():
+        return jsonify({"error": "Tunnel info not available via tunnel"}), 403
+    
+    # Check if device is registered
+    if not TUNNEL_CONFIG_FILE.exists():
+        return jsonify({
+            "error": "Device not registered",
+            "registered": False
+        }), 404
+    
+    # Load tunnel configuration
+    try:
+        with open(TUNNEL_CONFIG_FILE) as f:
+            tunnel_data = json.load(f)
+    except Exception as e:
+        logging.error(f"Failed to load tunnel config: {e}")
+        return jsonify({"error": "Failed to load tunnel configuration"}), 500
+    
+    # Return tunnel URL information
+    owner_hostname = tunnel_data.get("owner_hostname")
+    if not owner_hostname:
+        return jsonify({"error": "Owner hostname not configured"}), 500
+    
+    return jsonify({
+        "tunnel_url": f"https://{owner_hostname}",
+        "registered": True
+    })
+
 
 @app.route("/api/states")
 def api_states():

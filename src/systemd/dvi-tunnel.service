@@ -6,7 +6,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=dviha
-ExecStart=/usr/local/bin/cloudflared tunnel run --config /home/dviha/dvi-bridge/cloudflared/config.yml
+ExecStart=/usr/local/bin/cloudflared tunnel --config /home/dviha/dvi-bridge/cloudflared/config.yml run
 Restart=always
 RestartSec=10
 StandardOutput=journal

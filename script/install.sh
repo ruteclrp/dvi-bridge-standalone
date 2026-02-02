@@ -105,6 +105,38 @@ fi
 echo "== Updating current symlink =="
 ln -sfn "$RELEASE_DIR" "$BASE/current"
 
+echo "== Installing cloudflared (for remote access) =="
+if ! command -v cloudflared &> /dev/null; then
+  ARCH=$(uname -m)
+  if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+    CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64"
+  elif [ "$ARCH" = "armv7l" ] || [ "$ARCH" = "armv6l" ]; then
+    CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm"
+  else
+    CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
+  fi
+  
+  echo "  Downloading cloudflared for $ARCH..."
+  sudo wget -q "$CLOUDFLARED_URL" -O /usr/local/bin/cloudflared
+  sudo chmod +x /usr/local/bin/cloudflared
+  echo "✓ cloudflared installed"
+else
+  echo "✓ cloudflared already installed"
+fi
+
+echo "== Setting up device registration =="
+sudo mkdir -p /etc/dvi-bridge
+sudo mkdir -p /etc/cloudflared
+
+# Copy .env if it exists in the release (with real credentials)
+if [ -f "$RELEASE_DIR/sidecar/.env" ]; then
+  sudo cp "$RELEASE_DIR/sidecar/.env" /etc/dvi-bridge/.env
+  echo "✓ Registration configuration copied"
+elif [ -f "$RELEASE_DIR/sidecar/.env.example" ]; then
+  sudo cp "$RELEASE_DIR/sidecar/.env.example" /etc/dvi-bridge/.env
+  echo "⚠️  Using .env.example - UPDATE /etc/dvi-bridge/.env with real credentials!"
+fi
+
 echo "== Installing systemd services =="
 if [ "$INSTALL_BRIDGE" = true ]; then
   if [ -f "$RELEASE_DIR/systemd/bridge.service.example" ]; then
@@ -124,6 +156,13 @@ if [ "$INSTALL_SIDECAR" = true ]; then
     sudo systemctl start webbridge.service
     echo "✓ Sidecar web interface installed and started"
   fi
+  
+  # Install tunnel service (but don't start until registered)
+  if [ -f "$RELEASE_DIR/systemd/dvi-tunnel.service" ]; then
+    sudo cp "$RELEASE_DIR/systemd/dvi-tunnel.service" "/etc/systemd/system/dvi-tunnel.service"
+    sudo systemctl daemon-reload
+    echo "✓ Tunnel service installed (run registration to activate)"
+  fi
 fi
 
 echo ""
@@ -135,5 +174,14 @@ echo "Location: $RELEASE_DIR"
 if [ "$INSTALL_SIDECAR" = true ]; then
   echo ""
   echo "Web interface available at: http://$(hostname -I | awk '{print $1}'):5000"
+  echo ""
+  echo "== Device Registration (for remote access) =="
+  echo "To enable remote access via Cloudflare tunnel:"
+  echo "  1. Update credentials: sudo nano /etc/dvi-bridge/.env"
+  echo "  2. Register device: sudo python3 $RELEASE_DIR/sidecar/registration.py"
+  echo "  3. Enable tunnel: sudo systemctl enable dvi-tunnel"
+  echo "  4. Start tunnel: sudo systemctl start dvi-tunnel"
+  echo ""
+  echo "See DEVICE_REGISTRATION.md for detailed instructions"
 fi
 ```

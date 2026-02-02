@@ -4,3 +4,4 @@ python-dotenv
 modbus-tk
 pyserial
 flask
+requests

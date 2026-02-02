@@ -4,6 +4,9 @@ import os
 import threading
 import time
 import tempfile
+import subprocess
+from pathlib import Path
+from dotenv import load_dotenv
 
 from flask import Flask, jsonify, request
 
@@ -16,12 +19,28 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] %(levelname)s %(message)s')
 WWW_DIR = os.path.join(BASE_DIR, "www")
 
+# Load environment from .env (actual RPi structure: /home/dviha/dvi-bridge/.env)
+env_locations = [
+    Path("/home/dviha/dvi-bridge/.env"),  # Standard installation location
+]
+for env_path in env_locations:
+    if env_path.exists():
+        load_dotenv(env_path)
+        break
+
 HTTP_HOST = "0.0.0.0"
 HTTP_PORT = 5000
 
 STATE_PATH = "./../state.json"
 COMMANDS_PATH = "./../commands.json"
 STATE_POLL_INTERVAL = 1.0  # seconds
+TUNNEL_CONFIG_FILE = Path("/home/dviha/dvi-bridge/tunnel_config.json")
+
+# -----------------------------------------------------------------------------
+# Device identification - just use os.getenv like bridge.py
+# -----------------------------------------------------------------------------
+
+pump_id = f"pump-{os.getenv('FABNR')}" if os.getenv('FABNR') else "pump-unknown"
 
 # -----------------------------------------------------------------------------
 # Global state (HA-style)
@@ -95,6 +114,22 @@ def load_state_loop():
 
 threading.Thread(target=load_state_loop, daemon=True).start()
 print(f"✅ Reading state from {STATE_PATH}")
+print(f"✅ Device ID: {pump_id}")
+
+# Load tunnel info if available
+tunnel_info = {}
+if TUNNEL_CONFIG_FILE.exists():
+    try:
+        with open(TUNNEL_CONFIG_FILE) as f:
+            tunnel_info = json.load(f)
+        print(f"✅ Device registered: {pump_id}")
+        print(f"   Owner URL: https://{tunnel_info.get('owner_hostname', 'N/A')}")
+        print(f"   Maker URL: https://{tunnel_info.get('maker_hostname', 'N/A')}")
+    except Exception as e:
+        print(f"⚠️  Failed to load tunnel config: {e}")
+else:
+    print(f"⚠️  Device not registered yet (pump_id: {pump_id})")
+    print("   Run: sudo python3 registration.py")
 
 # -----------------------------------------------------------------------------
 # Flask app
@@ -263,6 +298,32 @@ def api_pump_type():
     # TESTING OVERRIDE: Uncomment the next line to force BW mode in frontend
     # return jsonify({"pump_type": "BW"})
     return jsonify({"pump_type": pump_type})
+
+
+@app.route("/api/device_info")
+def api_device_info():
+    """Return device identification and tunnel information"""
+    info = {
+        "pump_id": pump_id,
+        "pump_type": pump_type,
+        "registered": TUNNEL_CONFIG_FILE.exists()
+    }
+    
+    # Add tunnel info if available
+    if TUNNEL_CONFIG_FILE.exists():
+        try:
+            with open(TUNNEL_CONFIG_FILE) as f:
+                tunnel_data = json.load(f)
+            info["tunnel"] = {
+                "owner_hostname": tunnel_data.get("owner_hostname"),
+                "maker_hostname": tunnel_data.get("maker_hostname"),
+                "owner_url": f"https://{tunnel_data.get('owner_hostname')}" if tunnel_data.get('owner_hostname') else None,
+                "maker_url": f"https://{tunnel_data.get('maker_hostname')}" if tunnel_data.get('maker_hostname') else None
+            }
+        except Exception as e:
+            logging.error(f"Failed to load tunnel config: {e}")
+    
+    return jsonify(info)
 
 
 @app.route("/api/history/<sensor_name>")

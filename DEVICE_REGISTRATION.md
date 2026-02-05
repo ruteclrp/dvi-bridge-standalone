@@ -62,6 +62,7 @@ This will:
 - Create configuration directories
 - Copy .env to /etc/dvi-bridge/
 - Install systemd service
+- Install heartbeat cron job (every 2 minutes)
 
 ### 3. Register Device
 
@@ -160,6 +161,26 @@ cloudflared tunnel run --token <tunnel-token>
 ```bash
 cloudflared tunnel info
 ```
+
+## Heartbeat Keep-Alive
+
+The sidecar periodically notifies the Maker backend to update the device `last_seen` value.
+
+**Endpoint:** `POST /device/heartbeat`
+
+**Body:**
+```
+pump_id (required)
+status (optional)
+```
+
+The setup script installs a cron job at `/etc/cron.d/dvi-heartbeat` that calls:
+
+```bash
+python3 src/sidecar/heartbeat.py
+```
+
+This runs every 2 minutes and uses the same Cloudflare Access headers as registration.
 
 ## Troubleshooting
 

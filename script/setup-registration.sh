@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo ""
-echo "[1/5] Installing cloudflared..."
+echo "[1/6] Installing cloudflared..."
 if ! command -v cloudflared &> /dev/null; then
     # Detect architecture
     ARCH=$(uname -m)
@@ -41,18 +41,18 @@ else
 fi
 
 echo ""
-echo "[2/5] Installing Python dependencies..."
+echo "[2/6] Installing Python dependencies..."
 pip3 install -r "$PROJECT_ROOT/src/bridge/requirements.txt"
 echo "  ✓ Python dependencies installed"
 
 echo ""
-echo "[3/5] Creating configuration directory..."
+echo "[3/6] Creating configuration directory..."
 mkdir -p /etc/dvi-bridge
 mkdir -p /etc/cloudflared
 echo "  ✓ Directories created"
 
 echo ""
-echo "[4/5] Setting up environment configuration..."
+echo "[4/6] Setting up environment configuration..."
 if [ ! -f /etc/dvi-bridge/.env ]; then
     if [ -f "$PROJECT_ROOT/src/sidecar/.env" ]; then
         cp "$PROJECT_ROOT/src/sidecar/.env" /etc/dvi-bridge/.env
@@ -72,10 +72,20 @@ else
 fi
 
 echo ""
-echo "[5/5] Installing systemd service..."
+echo "[5/6] Installing systemd service..."
 cp "$PROJECT_ROOT/src/systemd/dvi-tunnel.service" /etc/systemd/system/
 systemctl daemon-reload
 echo "  ✓ Systemd service installed"
+
+echo ""
+echo "[6/6] Installing heartbeat cron job..."
+CRON_FILE="/etc/cron.d/dvi-heartbeat"
+HEARTBEAT_SCRIPT="$PROJECT_ROOT/src/sidecar/heartbeat.py"
+cat > "$CRON_FILE" <<EOF
+*/2 * * * * root /usr/bin/python3 "$HEARTBEAT_SCRIPT" >> /var/log/dvi-heartbeat.log 2>&1
+EOF
+chmod 644 "$CRON_FILE"
+echo "  ✓ Cron job installed (${CRON_FILE})"
 
 echo ""
 echo "=========================================="

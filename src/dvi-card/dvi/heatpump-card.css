@@ -340,3 +340,38 @@ ha-card {
 		display: none;
 	}
 }
+
+@media (max-height: 500px) and (orientation: landscape) {
+	ha-card {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-rows: 1fr;
+		gap: 0;
+		align-items: start;
+	}
+
+	.header {
+		display: none;
+	}
+
+	.diagram {
+		grid-column: 1;
+		grid-row: 1;
+		margin: 0;
+		max-width: 100%;
+	}
+
+	.mode-chips-bar {
+		grid-column: 2;
+		grid-row: 1;
+		flex-direction: column;
+		align-items: stretch;
+		justify-content: flex-start;
+		width: auto;
+		max-width: none;
+		height: 100%;
+		align-self: stretch;
+		padding: 6px 8px;
+		overflow-y: auto;
+	}
+}

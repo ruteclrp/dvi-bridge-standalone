@@ -163,6 +163,8 @@ from flask import abort, g
 import secrets
 
 TOKEN_HASHES_FILE = os.path.join(BASE_DIR, "valid_token_hashes.json")
+AUTH_COOKIE_NAME = "dvi_owner_session"
+AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 
 def load_valid_token_hashes():
     """
@@ -198,15 +200,20 @@ PUBLIC_PATHS = {
     "/health",
 }
 
-def verify_token(token: str) -> bool:
-    """
-    Check token against stored hashes.
-    Replace this with your real storage.
-    """
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def verify_token_hash(token_hash: str) -> bool:
+    """Check token hash against stored hashes."""
     valid = token_hash in load_valid_token_hashes()
-    logging.debug(f"Verifying token: {token[:6]}... hash: {token_hash}, valid: {valid}")
+    logging.debug(f"Verifying token hash: {token_hash[:8]}..., valid: {valid}")
     return valid
+
+def verify_token(token: str) -> bool:
+    """Check raw token against stored hashes."""
+    token_hash = hash_token(token)
+    logging.debug(f"Verifying token: {token[:6]}... hash: {token_hash}")
+    return verify_token_hash(token_hash)
 
 @app.before_request
 def auth_middleware():
@@ -218,17 +225,35 @@ def auth_middleware():
     host = request.host.split(":")[0]  # Remove port if present
     if "-owner." in host.lower():
         logging.debug(f"Tunnel access detected for host: {host}, path: {request.path}")
+
         auth = request.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
-            logging.warning(f"Missing or invalid Authorization header from {host}")
-            abort(401)
-        token = auth.removeprefix("Bearer ").strip()
-        if not token or not verify_token(token):
-            logging.warning(f"Invalid token from {host}")
-            abort(401)
-        # Optional: attach identity info
-        g.owner_authenticated = True
-        logging.debug(f"Successfully authenticated tunnel access to {request.path}")
+        token = ""
+        if auth.startswith("Bearer "):
+            token = auth.removeprefix("Bearer ").strip()
+
+        cookie_hash = request.cookies.get(AUTH_COOKIE_NAME, "")
+
+        if token:
+            token_hash = hash_token(token)
+            if not verify_token_hash(token_hash):
+                logging.warning(f"Invalid token from {host}")
+                abort(401)
+            g.owner_authenticated = True
+            g.set_auth_cookie = True
+            g.auth_cookie_hash = token_hash
+            logging.debug(f"Successfully authenticated via header for {request.path}")
+            return
+
+        if cookie_hash and verify_token_hash(cookie_hash):
+            g.owner_authenticated = True
+            logging.debug(f"Successfully authenticated via cookie for {request.path}")
+            return
+
+        if not auth:
+            logging.warning(f"Missing Authorization header from {host}")
+        else:
+            logging.warning(f"Invalid Authorization header from {host}")
+        abort(401)
     # If not Owner app, allow (local network, etc.)
 
 # Disable caching for development
@@ -240,6 +265,17 @@ def add_no_cache_headers(response):
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
+
+    if getattr(g, "set_auth_cookie", False):
+        secure_cookie = request.is_secure
+        response.set_cookie(
+            AUTH_COOKIE_NAME,
+            g.auth_cookie_hash,
+            max_age=AUTH_COOKIE_MAX_AGE,
+            httponly=True,
+            secure=secure_cookie,
+            samesite="Lax",
+        )
     return response
 
 @app.route("/")

@@ -79,6 +79,26 @@
     }
   }
 
+  /* Landscape phones: give the modal more room and allow overflow */
+  @media (max-height: 500px) and (orientation: landscape) {
+    .modal-overlay {
+      align-items: flex-start;
+      padding: 8px 0;
+    }
+
+    .modal-content {
+      width: 92vw;
+      max-width: 92vw;
+      max-height: 90vh;
+      margin: 0 4vw;
+    }
+
+    .modal-body {
+      max-height: calc(90vh - 56px);
+      overflow-y: auto;
+    }
+  }
+
   .modal-header {
     padding: 16px 20px;
     border-bottom: 1px solid #333;

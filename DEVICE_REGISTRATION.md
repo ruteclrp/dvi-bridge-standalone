@@ -182,6 +182,12 @@ python3 src/sidecar/heartbeat.py
 
 This runs every 2 minutes and uses the same Cloudflare Access headers as registration.
 
+To point heartbeat at a different base URL (for example, a server running on the Pi at port 8000), set:
+
+```env
+HEARTBEAT_BASE_URL=http://<pi-ip>:8000
+```
+
 ## Troubleshooting
 
 ### Registration fails with 401 Unauthorized

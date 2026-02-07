@@ -42,7 +42,33 @@ fi
 
 echo ""
 echo "[2/6] Installing Python dependencies..."
-pip3 install -r "$PROJECT_ROOT/src/bridge/requirements.txt"
+PIP_CMD=""
+if [ -x "/home/dviha/dvi-bridge/venv/bin/pip" ]; then
+    PIP_CMD="/home/dviha/dvi-bridge/venv/bin/pip"
+elif [ -x "$PROJECT_ROOT/.venv/bin/pip" ]; then
+    PIP_CMD="$PROJECT_ROOT/.venv/bin/pip"
+elif command -v pip3 &> /dev/null; then
+    PIP_CMD="pip3"
+fi
+
+REQ_FILE=""
+if [ -f "/home/dviha/dvi-bridge/requirements.txt" ]; then
+    REQ_FILE="/home/dviha/dvi-bridge/requirements.txt"
+elif [ -f "$PROJECT_ROOT/src/bridge/requirements.txt" ]; then
+    REQ_FILE="$PROJECT_ROOT/src/bridge/requirements.txt"
+fi
+
+if [ -z "$REQ_FILE" ]; then
+    echo "  ✗ requirements.txt not found. Expected /home/dviha/dvi-bridge/requirements.txt"
+    exit 1
+fi
+
+if [ -z "$PIP_CMD" ]; then
+    echo "  ✗ pip not found. Install python3-pip or create a venv at $PROJECT_ROOT/.venv"
+    exit 1
+fi
+
+$PIP_CMD install -r "$REQ_FILE"
 echo "  ✓ Python dependencies installed"
 
 echo ""
@@ -54,7 +80,10 @@ echo "  ✓ Directories created"
 echo ""
 echo "[4/6] Setting up environment configuration..."
 if [ ! -f /etc/dvi-bridge/.env ]; then
-    if [ -f "$PROJECT_ROOT/src/sidecar/.env" ]; then
+    if [ -f "/home/dviha/dvi-bridge/.env" ]; then
+        cp "/home/dviha/dvi-bridge/.env" /etc/dvi-bridge/.env
+        echo "  ✓ Using existing .env file from /home/dviha/dvi-bridge/.env"
+    elif [ -f "$PROJECT_ROOT/src/sidecar/.env" ]; then
         cp "$PROJECT_ROOT/src/sidecar/.env" /etc/dvi-bridge/.env
         echo "  ✓ Using existing .env file"
     elif [ -f "$PROJECT_ROOT/src/sidecar/.env.example" ]; then
@@ -73,16 +102,22 @@ fi
 
 echo ""
 echo "[5/6] Installing systemd service..."
-cp "$PROJECT_ROOT/src/systemd/dvi-tunnel.service" /etc/systemd/system/
+cp "$PROJECT_ROOT/dvi-bridge/systemd/dvi-tunnel.service" /etc/systemd/system/
 systemctl daemon-reload
 echo "  ✓ Systemd service installed"
 
 echo ""
 echo "[6/6] Installing heartbeat cron job..."
 CRON_FILE="/etc/cron.d/dvi-heartbeat"
-HEARTBEAT_SCRIPT="$PROJECT_ROOT/src/sidecar/heartbeat.py"
+HEARTBEAT_SCRIPT="$PROJECT_ROOT/dvi-bridge/sidecar/heartbeat.py"
+PYTHON_CMD="/usr/bin/python3"
+if [ -x "/home/dviha/dvi-bridge/venv/bin/python" ]; then
+    PYTHON_CMD="/home/dviha/dvi-bridge/venv/bin/python"
+elif [ -x "$PROJECT_ROOT/.venv/bin/python" ]; then
+    PYTHON_CMD="$PROJECT_ROOT/.venv/bin/python"
+fi
 cat > "$CRON_FILE" <<EOF
-*/2 * * * * root /usr/bin/python3 "$HEARTBEAT_SCRIPT" >> /var/log/dvi-heartbeat.log 2>&1
+*/2 * * * * root "$PYTHON_CMD" "$HEARTBEAT_SCRIPT" >> /var/log/dvi-heartbeat.log 2>&1
 EOF
 chmod 644 "$CRON_FILE"
 echo "  ✓ Cron job installed (${CRON_FILE})"
@@ -94,11 +129,11 @@ echo "=========================================="
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Update the backend URL in /etc/dvi-bridge/.env"
-echo "   sudo nano /etc/dvi-bridge/.env"
+echo "1. Update the backend URL in /home/dviha/dvi-bridge/.env"
+echo "   sudo nano /home/dviha/dvi-bridge/.env"
 echo ""
 echo "2. Register this device with the backend:"
-echo "   sudo python3 $PROJECT_ROOT/src/sidecar/registration.py"
+echo "   sudo /home/dviha/dvi-bridge/venv/bin/python /home/dviha/dvi-bridge/sidecar/registration.py"
 echo ""
 echo "3. Enable tunnel to start on boot:"
 echo "   sudo systemctl enable dvi-tunnel"

@@ -1,30 +1,31 @@
 # Device Registration Setup Guide
 
-This guide explains how to set up device registration for the DVI Bridge RPi sidecar to connect to the Maker backend via Cloudflare tunnels.
+This guide explains how to set up device registration for the DVI Bridge RPi sidecar to connect to the Maker backend via Cloudflare Access while keeping the owner tunnel and hostname.
 
 ## Overview
 
 Each RPi sidecar registers with the Maker backend to receive:
-- Unique Cloudflare tunnel configuration
-- Tunnel token (for secure connection)
-- Owner and Maker hostnames for remote access
+- Owner tunnel configuration (owner-only hostname)
+- A device-scoped Cloudflare Access service token
+- A device-scoped credential (e.g. JWT) for backend sessions
+- Backend URL for the device channel
 
 ## Architecture
 
 ```
 RPi (Owner's Network)
-    ↓
-    HTTPS POST /device/register (with CF-Access headers)
-    ↓
-Maker Backend (creates tunnel via Cloudflare API)
-    ↓
-    Returns: tunnel_token, hostnames
-    ↓
-RPi configures and starts cloudflared
-    ↓
-Tunnel established to Cloudflare
-    ↓
-Owner/Maker can access heatpump via https://pump-xxx-owner.yourdomain.com
+  ↓
+  HTTPS POST /device/register (with CF-Access bootstrap headers)
+  ↓
+Maker Backend (issues owner tunnel + device Access token)
+  ↓
+  Returns: owner tunnel token + owner hostname + cf_access_client_id + cf_access_client_secret + backend_url
+  ↓
+RPi stores credentials locally and configures cloudflared
+  ↓
+Owner connects via https://<owner-hostname>
+  ↓
+RPi also connects outbound to Access-protected backend for maker support
 ```
 
 ## Prerequisites
@@ -57,11 +58,9 @@ sudo bash script/setup-registration.sh
 ```
 
 This will:
-- Install cloudflared
 - Install Python dependencies
 - Create configuration directories
 - Copy .env to /etc/dvi-bridge/
-- Install systemd service
 - Install heartbeat cron job (every 2 minutes)
 
 ### 3. Register Device
@@ -71,18 +70,15 @@ sudo python3 src/sidecar/registration.py
 ```
 
 This will:
-- Generate or retrieve unique device ID (based on MAC address)
+- Determine device ID from FABNR in `.env`
 - Contact the backend to register
-- Receive tunnel configuration
-- Configure cloudflared
-- Start the tunnel
+- Receive owner tunnel configuration
+- Receive device-scoped Access credentials
+- Store credentials locally
 
-### 4. Enable Automatic Startup
+### 4. Start Services
 
-```bash
-sudo systemctl enable dvi-tunnel
-sudo systemctl start dvi-tunnel
-```
+Enable the tunnel and start or restart your bridge and webbridge services as needed.
 
 ## Configuration Files
 
@@ -90,76 +86,47 @@ sudo systemctl start dvi-tunnel
 Main configuration file with backend URL and credentials:
 ```env
 MAKER_BACKEND_URL=https://your-backend.yourdomain.com
+CF_ACCESS_BOOTSTRAP_CLIENT_ID=xxx
+CF_ACCESS_BOOTSTRAP_CLIENT_SECRET=xxx
 CF_ACCESS_CLIENT_ID=xxx
 CF_ACCESS_CLIENT_SECRET=xxx
-CLOUDFLARE_ACCOUNT_ID=xxx
+REGISTRATION_API_TOKEN=xxx
 ```
 
-### /etc/dvi-bridge/tunnel_config.json
-Stores received tunnel configuration:
+### /home/dviha/dvi-bridge/device_registration.json
+Stores received registration details:
+```json
+{
+  "device_id": "pump-123456",
+  "pump_id": "pump-123456",
+  "backend_url": "https://backend.example.com",
+  "mode": "backend_access",
+  "registered_at": "2026-02-07T12:00:00Z"
+}
+```
+
+### /home/dviha/dvi-bridge/tunnel_config.json
+Stores the owner tunnel configuration:
 ```json
 {
   "tunnel_id": "xxx",
   "tunnel_token": "xxx",
-  "owner_hostname": "pump-xxx-owner.yourdomain.com",
-  "maker_hostname": "pump-xxx-maker.yourdomain.com"
+  "owner_hostname": "pump-xxx-owner.yourdomain.com"
 }
-```
-
-### /etc/cloudflared/config.yml
-Cloudflared configuration:
-```yaml
-tunnel: <tunnel-id>
-credentials-file: /etc/cloudflared/credentials.json
-
-ingress:
-  - hostname: pump-xxx-owner.yourdomain.com
-    service: http://localhost:8080
-  - hostname: pump-xxx-maker.yourdomain.com
-    service: http://localhost:8080
-  - service: http_status:404
-```
-
-## Systemd Service
-
-The `dvi-tunnel.service` runs cloudflared in the background:
-
-```bash
-# Check status
-sudo systemctl status dvi-tunnel
-
-# View logs
-sudo journalctl -u dvi-tunnel -f
-
-# Restart tunnel
-sudo systemctl restart dvi-tunnel
 ```
 
 ## Device ID Generation
 
-The device ID is generated based on:
-1. **Primary**: MAC address of eth0
-2. **Fallback 1**: MAC address of wlan0
-3. **Fallback 2**: Generated UUID (saved to /etc/dvi-bridge/device_uuid.txt)
+The device ID is derived from the FABNR value in `.env`.
 
-Format: `pump-<mac-address-without-colons>` or `pump-<uuid>`
+Format: `pump-<FABNR>`
 
 ## Manual Operations
 
 ### Re-register Device
-This creates a new tunnel:
+This creates a new device session and re-issues credentials (and owner tunnel):
 ```bash
 sudo python3 src/sidecar/registration.py
-```
-
-### Manually Start Tunnel (without systemd)
-```bash
-cloudflared tunnel run --token <tunnel-token>
-```
-
-### Check Tunnel Status
-```bash
-cloudflared tunnel info
 ```
 
 ## Heartbeat Keep-Alive
@@ -191,8 +158,8 @@ HEARTBEAT_BASE_URL=http://<pi-ip>:8000
 ## Troubleshooting
 
 ### Registration fails with 401 Unauthorized
-- Check CF_ACCESS_CLIENT_ID and CF_ACCESS_CLIENT_SECRET in .env
-- Verify backend is using the same credentials
+- Check CF_ACCESS_BOOTSTRAP_CLIENT_ID and CF_ACCESS_BOOTSTRAP_CLIENT_SECRET in .env
+- Verify backend allows Access service tokens for the registration endpoint
 
 ### Registration fails with connection error
 - Check MAKER_BACKEND_URL is correct and reachable
@@ -229,13 +196,14 @@ All three services should run simultaneously.
 
 ```
 /etc/dvi-bridge/
-  ├── .env                      # Configuration
-  ├── tunnel_config.json        # Received tunnel config
-  └── device_uuid.txt           # Generated device ID (if needed)
+  └── .env                      # Configuration
 
-/etc/cloudflared/
-  ├── config.yml                # Cloudflared config
-  └── credentials.json          # Tunnel credentials
+/home/dviha/dvi-bridge/
+  ├── device_registration.json  # Access/device registration
+  ├── tunnel_config.json        # Owner tunnel config
+  └── cloudflared/
+      ├── config.yml            # Cloudflared config
+      └── credentials.json      # Tunnel credentials
 
 /etc/systemd/system/
   └── dvi-tunnel.service        # Systemd service
@@ -248,9 +216,8 @@ All three services should run simultaneously.
 
 After successful registration:
 1. Access your heatpump at the provided owner URL
-2. Share maker URL with service technicians if needed
-3. Monitor tunnel health via systemd logs
-4. Set up Cloudflare Access policies (optional) for additional security
+2. Monitor tunnel health via systemd logs
+3. Set up Cloudflare Access policies (optional) for additional security
 
 ## Support
 

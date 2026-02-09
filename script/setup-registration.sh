@@ -30,7 +30,7 @@ if ! command -v cloudflared &> /dev/null; then
     else
         CLOUDFLARED_URL="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64"
     fi
-    
+
     echo "  Downloading cloudflared for $ARCH..."
     wget -q "$CLOUDFLARED_URL" -O /tmp/cloudflared
     chmod +x /tmp/cloudflared
@@ -45,8 +45,8 @@ echo "[2/6] Installing Python dependencies..."
 PIP_CMD=""
 if [ -x "/home/dviha/dvi-bridge/venv/bin/pip" ]; then
     PIP_CMD="/home/dviha/dvi-bridge/venv/bin/pip"
-elif [ -x "$PROJECT_ROOT/.venv/bin/pip" ]; then
-    PIP_CMD="$PROJECT_ROOT/.venv/bin/pip"
+elif [ -x "$PROJECT_ROOT/dvi-bridge/.venv/bin/pip" ]; then
+    PIP_CMD="$PROJECT_ROOT/dvi-bridge/.venv/bin/pip"
 elif command -v pip3 &> /dev/null; then
     PIP_CMD="pip3"
 fi
@@ -54,8 +54,8 @@ fi
 REQ_FILE=""
 if [ -f "/home/dviha/dvi-bridge/requirements.txt" ]; then
     REQ_FILE="/home/dviha/dvi-bridge/requirements.txt"
-elif [ -f "$PROJECT_ROOT/src/bridge/requirements.txt" ]; then
-    REQ_FILE="$PROJECT_ROOT/src/bridge/requirements.txt"
+elif [ -f "$PROJECT_ROOT/dvi-bridge/requirements.txt" ]; then
+    REQ_FILE="$PROJECT_ROOT/dvi-bridge/requirements.txt"
 fi
 
 if [ -z "$REQ_FILE" ]; then
@@ -64,7 +64,7 @@ if [ -z "$REQ_FILE" ]; then
 fi
 
 if [ -z "$PIP_CMD" ]; then
-    echo "  ✗ pip not found. Install python3-pip or create a venv at $PROJECT_ROOT/.venv"
+    echo "  ✗ pip not found. Install python3-pip or create a venv at $PROJECT_ROOT/dvi-bridge/.venv"
     exit 1
 fi
 
@@ -74,7 +74,6 @@ echo "  ✓ Python dependencies installed"
 echo ""
 echo "[3/6] Creating configuration directory..."
 mkdir -p /etc/dvi-bridge
-mkdir -p /etc/cloudflared
 echo "  ✓ Directories created"
 
 echo ""
@@ -83,11 +82,11 @@ if [ ! -f /etc/dvi-bridge/.env ]; then
     if [ -f "/home/dviha/dvi-bridge/.env" ]; then
         cp "/home/dviha/dvi-bridge/.env" /etc/dvi-bridge/.env
         echo "  ✓ Using existing .env file from /home/dviha/dvi-bridge/.env"
-    elif [ -f "$PROJECT_ROOT/src/sidecar/.env" ]; then
-        cp "$PROJECT_ROOT/src/sidecar/.env" /etc/dvi-bridge/.env
+    elif [ -f "$PROJECT_ROOT/dvi-bridge/sidecar/.env" ]; then
+        cp "$PROJECT_ROOT/dvi-bridge/sidecar/.env" /etc/dvi-bridge/.env
         echo "  ✓ Using existing .env file"
-    elif [ -f "$PROJECT_ROOT/src/sidecar/.env.example" ]; then
-        cp "$PROJECT_ROOT/src/sidecar/.env.example" /etc/dvi-bridge/.env
+    elif [ -f "$PROJECT_ROOT/dvi-bridge/sidecar/.env.example" ]; then
+        cp "$PROJECT_ROOT/dvi-bridge/sidecar/.env.example" /etc/dvi-bridge/.env
         echo "  ⚠️  Created .env from example - UPDATE MAKER_BACKEND_URL!"
         echo ""
         echo "  Edit /etc/dvi-bridge/.env and set:"
@@ -113,8 +112,8 @@ HEARTBEAT_SCRIPT="$PROJECT_ROOT/dvi-bridge/sidecar/heartbeat.py"
 PYTHON_CMD="/usr/bin/python3"
 if [ -x "/home/dviha/dvi-bridge/venv/bin/python" ]; then
     PYTHON_CMD="/home/dviha/dvi-bridge/venv/bin/python"
-elif [ -x "$PROJECT_ROOT/.venv/bin/python" ]; then
-    PYTHON_CMD="$PROJECT_ROOT/.venv/bin/python"
+elif [ -x "$PROJECT_ROOT/dvi-bridge/.venv/bin/python" ]; then
+    PYTHON_CMD="$PROJECT_ROOT/dvi-bridge/.venv/bin/python"
 fi
 cat > "$CRON_FILE" <<EOF
 */2 * * * * root "$PYTHON_CMD" "$HEARTBEAT_SCRIPT" >> /var/log/dvi-heartbeat.log 2>&1
@@ -129,8 +128,8 @@ echo "=========================================="
 echo ""
 echo "Next steps:"
 echo ""
-echo "1. Update the backend URL in /home/dviha/dvi-bridge/.env"
-echo "   sudo nano /home/dviha/dvi-bridge/.env"
+echo "1. Update backend and Access settings in /etc/dvi-bridge/.env"
+echo "   sudo nano /etc/dvi-bridge/.env"
 echo ""
 echo "2. Register this device with the backend:"
 echo "   sudo /home/dviha/dvi-bridge/venv/bin/python /home/dviha/dvi-bridge/sidecar/registration.py"
@@ -141,4 +140,6 @@ echo "   sudo systemctl start dvi-tunnel"
 echo ""
 echo "4. Check tunnel status:"
 echo "   sudo systemctl status dvi-tunnel"
+echo ""
+echo "5. Start or restart your bridge and webbridge services"
 echo ""

@@ -5,3 +5,4 @@ modbus-tk
 pyserial
 flask
 requests
+websocket-client

@@ -1,0 +1,13 @@
+[Unit]
+Description=DVI Backend Server (FastAPI/Uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ruteclrp/DVI-bridge
+ExecStart=/home/ruteclrp/DVI-bridge/.venv uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+Restart=always
+EnvironmentFile=/home/ruteclrp/DVI-bridge/.env
+
+[Install]
+WantedBy=multi-user.target

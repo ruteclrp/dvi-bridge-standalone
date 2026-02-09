@@ -35,6 +35,7 @@ STATE_PATH = "./../state.json"
 COMMANDS_PATH = "./../commands.json"
 STATE_POLL_INTERVAL = 1.0  # seconds
 TUNNEL_CONFIG_FILE = Path("/home/dviha/dvi-bridge/tunnel_config.json")
+DEVICE_REGISTRATION_FILE = Path("/home/dviha/dvi-bridge/device_registration.json")
 
 # -----------------------------------------------------------------------------
 # Device identification - just use os.getenv like bridge.py
@@ -116,18 +117,34 @@ threading.Thread(target=load_state_loop, daemon=True).start()
 print(f"✅ Reading state from {STATE_PATH}")
 print(f"✅ Device ID: {pump_id}")
 
-# Load tunnel info if available
+# Load registration info if available
+registration_info = {}
 tunnel_info = {}
+registration_mode = "unregistered"
+
+if DEVICE_REGISTRATION_FILE.exists():
+    try:
+        with open(DEVICE_REGISTRATION_FILE) as f:
+            registration_info = json.load(f)
+        registration_mode = registration_info.get("mode", "backend_access")
+        print(f"✅ Device registered: {pump_id}")
+        if registration_info.get("backend_url"):
+            print(f"   Backend URL: {registration_info.get('backend_url')}")
+    except Exception as e:
+        print(f"⚠️  Failed to load registration config: {e}")
+
 if TUNNEL_CONFIG_FILE.exists():
     try:
         with open(TUNNEL_CONFIG_FILE) as f:
             tunnel_info = json.load(f)
-        print(f"✅ Device registered: {pump_id}")
+        if registration_mode == "unregistered":
+            registration_mode = "legacy_tunnel"
+        print(f"✅ Owner tunnel configured: {pump_id}")
         print(f"   Owner URL: https://{tunnel_info.get('owner_hostname', 'N/A')}")
-        print(f"   Maker URL: https://{tunnel_info.get('maker_hostname', 'N/A')}")
     except Exception as e:
         print(f"⚠️  Failed to load tunnel config: {e}")
-else:
+
+if not registration_info and not tunnel_info:
     print(f"⚠️  Device not registered yet (pump_id: {pump_id})")
     print("   Run: sudo python3 registration.py")
 
@@ -330,29 +347,41 @@ def api_tunnel():
         return jsonify({"error": "Tunnel info not available via tunnel"}), 403
     
     # Check if device is registered
-    if not TUNNEL_CONFIG_FILE.exists():
+    if not DEVICE_REGISTRATION_FILE.exists() and not TUNNEL_CONFIG_FILE.exists():
         return jsonify({
             "error": "Device not registered",
             "registered": False
         }), 404
-    
-    # Load tunnel configuration
-    try:
-        with open(TUNNEL_CONFIG_FILE) as f:
-            tunnel_data = json.load(f)
-    except Exception as e:
-        logging.error(f"Failed to load tunnel config: {e}")
-        return jsonify({"error": "Failed to load tunnel configuration"}), 500
-    
-    # Return tunnel URL information
-    owner_hostname = tunnel_data.get("owner_hostname")
-    if not owner_hostname:
-        return jsonify({"error": "Owner hostname not configured"}), 500
-    
-    return jsonify({
-        "tunnel_url": f"https://{owner_hostname}",
-        "registered": True
-    })
+
+    response = {
+        "registered": True,
+        "mode": registration_mode,
+    }
+
+    if DEVICE_REGISTRATION_FILE.exists():
+        try:
+            with open(DEVICE_REGISTRATION_FILE) as f:
+                device_data = json.load(f)
+            response["backend_url"] = device_data.get("backend_url")
+            response["device_id"] = device_data.get("device_id")
+        except Exception as e:
+            logging.error(f"Failed to load registration config: {e}")
+            return jsonify({"error": "Failed to load registration configuration"}), 500
+
+    if TUNNEL_CONFIG_FILE.exists():
+        try:
+            with open(TUNNEL_CONFIG_FILE) as f:
+                tunnel_data = json.load(f)
+        except Exception as e:
+            logging.error(f"Failed to load tunnel config: {e}")
+            return jsonify({"error": "Failed to load tunnel configuration"}), 500
+
+        owner_hostname = tunnel_data.get("owner_hostname")
+        if not owner_hostname:
+            return jsonify({"error": "Owner hostname not configured"}), 500
+        response["tunnel_url"] = f"https://{owner_hostname}"
+
+    return jsonify(response)
 
 
 @app.route("/api/states")
@@ -392,19 +421,29 @@ def api_device_info():
     info = {
         "pump_id": pump_id,
         "pump_type": pump_type,
-        "registered": TUNNEL_CONFIG_FILE.exists()
+        "registered": DEVICE_REGISTRATION_FILE.exists() or TUNNEL_CONFIG_FILE.exists(),
+        "mode": registration_mode,
     }
-    
-    # Add tunnel info if available
+
+    # Add registration info if available
+    if DEVICE_REGISTRATION_FILE.exists():
+        try:
+            with open(DEVICE_REGISTRATION_FILE) as f:
+                device_data = json.load(f)
+            info["backend"] = {
+                "backend_url": device_data.get("backend_url"),
+                "device_id": device_data.get("device_id"),
+            }
+        except Exception as e:
+            logging.error(f"Failed to load registration config: {e}")
+
     if TUNNEL_CONFIG_FILE.exists():
         try:
             with open(TUNNEL_CONFIG_FILE) as f:
                 tunnel_data = json.load(f)
             info["tunnel"] = {
                 "owner_hostname": tunnel_data.get("owner_hostname"),
-                "maker_hostname": tunnel_data.get("maker_hostname"),
                 "owner_url": f"https://{tunnel_data.get('owner_hostname')}" if tunnel_data.get('owner_hostname') else None,
-                "maker_url": f"https://{tunnel_data.get('maker_hostname')}" if tunnel_data.get('maker_hostname') else None
             }
         except Exception as e:
             logging.error(f"Failed to load tunnel config: {e}")

@@ -70,6 +70,7 @@ export class DviHeatpumpCardEditor extends HTMLElement {
 			{ name: "cv_pump_icon", label: "CV pump state (cv_pump_icon)", selector: { entity: { domain: "binary_sensor" } } },
 			{ name: "defrost_icon", label: "Defrost state (defrost_icon)", selector: { entity: { domain: "binary_sensor" } } },
 			{ name: "heating_element", label: "Heating element state (heating_element)", selector: { entity: { domain: "binary_sensor" } } },
+			{ name: "open_request_entity", label: "Open request (open_request_entity)", selector: { entity: { domain: "binary_sensor" } } },
 		];
 	}
 
@@ -190,6 +191,7 @@ export class DviHeatpumpCardEditor extends HTMLElement {
 			cv_pump_icon: find("binary_sensor", "circ_pump_cv"),
 			defrost_icon: find("binary_sensor", "4_way_valve_defrost"),
 			heating_element: find("binary_sensor", "heating_element"),
+			open_request_entity: find("binary_sensor", "open_request"),
 			
 		};
 

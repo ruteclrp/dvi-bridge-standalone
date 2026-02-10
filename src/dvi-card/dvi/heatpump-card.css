@@ -252,6 +252,61 @@ ha-card {
 	color: inherit;
 }
 
+@keyframes open-request-pulse {
+	0% {
+		box-shadow: 0 0 0 0 rgba(255, 80, 80, 0.6);
+		background: rgba(255, 80, 80, 0.25);
+	}
+	50% {
+		box-shadow: 0 0 0 6px rgba(255, 80, 80, 0);
+		background: rgba(255, 80, 80, 0.45);
+	}
+	100% {
+		box-shadow: 0 0 0 0 rgba(255, 80, 80, 0);
+		background: rgba(255, 80, 80, 0.25);
+	}
+}
+
+@keyframes open-confirm-pulse {
+	0% {
+		box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.6);
+		background: rgba(76, 175, 80, 0.6);
+	}
+	50% {
+		box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
+		background: rgba(76, 175, 80, 0.8);
+	}
+	100% {
+		box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+		background: rgba(76, 175, 80, 0.6);
+	}
+}
+
+.mode-chip--open-request {
+	border-color: rgba(255, 80, 80, 0.8);
+	background: rgba(255, 80, 80, 0.25);
+	color: #fff;
+}
+
+.mode-chip--open-request-active {
+	animation: open-request-pulse 1s infinite;
+}
+
+.mode-chip--open-request-pending {
+	opacity: 0.7;
+}
+
+.mode-chip--open-confirm {
+	border-color: rgba(76, 175, 80, 1);
+	background: rgba(76, 175, 80, 0.6);
+	color: #fff;
+	opacity: 1;
+}
+
+.mode-chip--open-confirm-active {
+	animation: open-confirm-pulse 1s infinite;
+}
+
 .small-mode-icon {
 	--mdc-icon-size: 14px;
 	opacity: 0.9;
@@ -353,6 +408,29 @@ ha-card {
 	.header {
 		display: none;
 	}
+			50% {
+				box-shadow: 0 0 0 6px rgba(255, 80, 80, 0);
+				background: rgba(255, 80, 80, 0.45);
+			}
+			100% {
+				box-shadow: 0 0 0 0 rgba(255, 80, 80, 0);
+				background: rgba(255, 80, 80, 0.25);
+			}
+		}
+
+		@keyframes open-confirm-pulse {
+			0% {
+				box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.6);
+				background: rgba(76, 175, 80, 0.25);
+			}
+			50% {
+				box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
+				background: rgba(76, 175, 80, 0.45);
+			}
+			100% {
+				box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+				background: rgba(76, 175, 80, 0.25);
+			}
 
 	.diagram {
 		grid-column: 1;
@@ -369,6 +447,16 @@ ha-card {
 		justify-content: flex-start;
 		width: auto;
 		max-width: none;
+		.mode-chip--open-confirm {
+			border-color: rgba(76, 175, 80, 1);
+			background: rgba(76, 175, 80, 0.6);
+			color: #fff;
+			opacity: 1;
+		}
+
+		.mode-chip--open-confirm-active {
+			animation: open-confirm-pulse 1s infinite;
+		}
 		height: 100%;
 		align-self: stretch;
 		padding: 6px 8px;

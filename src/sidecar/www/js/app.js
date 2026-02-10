@@ -32,6 +32,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     comp_icon: "binary_sensor.soft_starter_compressor",
     cv_pump_icon: "binary_sensor.circ_pump_cv",
     defrost_icon: "binary_sensor.four_way_valve_defrost",
+    open_request_entity: "binary_sensor.open_request",
     cv_curve_number: "number.cv_curve",
     curve_set_minus12_number: "number.curve_set_minus12",
     curve_set_plus12_number: "number.curve_set_plus12",
@@ -66,6 +67,21 @@ window.addEventListener("DOMContentLoaded", async () => {
     await hass.refresh();
     card.hass = hass;
   }, 2000);
+
+  const closeOpenSession = () => {
+    try {
+      const payload = new Blob([], { type: "application/json" });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon("/api/open_request/close", payload);
+        return;
+      }
+    } catch (e) {
+      return;
+    }
+    fetch("/api/open_request/close", { method: "POST", keepalive: true });
+  };
+
+  window.addEventListener("beforeunload", closeOpenSession);
 });
 
 function applyChartDarkMode() {

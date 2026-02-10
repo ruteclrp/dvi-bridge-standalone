@@ -12,6 +12,7 @@ import glob
 import subprocess
 import socket  # <-- nødvendig til _get_default_gateway_linux
 import tempfile
+from pathlib import Path
 from typing import Optional
 
 # Find STM32 Virtual COM Port automatically
@@ -34,6 +35,105 @@ STATIC_VALUES_SCRIPT = os.path.join(SCRIPT_DIR, "read_static_values_modbustk.py"
 HISTORY_FILE = os.path.join(SCRIPT_DIR, "sensor_history.json")
 HISTORY_MAX_AGE = 86400  # 24 hours in seconds
 HISTORY_SAMPLE_INTERVAL = 15  # Sample every 15 seconds
+
+BRIDGE_BASE = Path("/home/dviha/dvi-bridge")
+OPEN_REQUEST_FILE = BRIDGE_BASE / "open_request.json"
+OPEN_CONFIRM_FILE = BRIDGE_BASE / "open_confirm.json"
+OPEN_CLOSE_FILE = BRIDGE_BASE / "open_close.json"
+OPEN_CONFIRM_TTL = 15 * 60
+
+
+def _read_open_request() -> dict:
+    if not OPEN_REQUEST_FILE.exists():
+        return {"pending": False}
+    try:
+        payload = json.loads(OPEN_REQUEST_FILE.read_text())
+        payload["pending"] = bool(payload.get("pending"))
+        return payload
+    except Exception:
+        return {"pending": False}
+
+
+def _read_open_confirm() -> dict:
+    if not OPEN_CONFIRM_FILE.exists():
+        return {"confirmed": False}
+    try:
+        payload = json.loads(OPEN_CONFIRM_FILE.read_text())
+        confirmed_at = payload.get("confirmed_at")
+        if not confirmed_at:
+            return {"confirmed": False}
+        expires_at = int(confirmed_at) + OPEN_CONFIRM_TTL
+        if int(time.time()) >= expires_at:
+            OPEN_CONFIRM_FILE.unlink(missing_ok=True)
+            return {"confirmed": False, "expired": True}
+        return {
+            "confirmed": True,
+            "confirmed_at": int(confirmed_at),
+            "expires_at": expires_at,
+        }
+    except Exception:
+        return {"confirmed": False}
+
+
+def _clear_open_request() -> None:
+    try:
+        if OPEN_REQUEST_FILE.exists():
+            OPEN_REQUEST_FILE.unlink()
+    except Exception:
+        return
+
+
+def _get_pump_id() -> str:
+    if PUMP_ID:
+        return f"pump-{PUMP_ID}"
+    return "pump-unknown"
+
+
+def _write_open_confirm(pump_id: str | None) -> None:
+    payload = {
+        "pump_id": pump_id or _get_pump_id(),
+        "confirmed_at": int(time.time()),
+    }
+    try:
+        OPEN_CONFIRM_FILE.parent.mkdir(parents=True, exist_ok=True)
+        OPEN_CONFIRM_FILE.write_text(json.dumps(payload))
+        _clear_open_request()
+    except Exception:
+        return
+
+
+def _write_open_close(pump_id: str | None) -> None:
+    payload = {
+        "pump_id": pump_id or _get_pump_id(),
+        "closed_at": int(time.time()),
+    }
+    try:
+        OPEN_CLOSE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        OPEN_CLOSE_FILE.write_text(json.dumps(payload))
+        OPEN_CONFIRM_FILE.unlink(missing_ok=True)
+        _clear_open_request()
+    except Exception:
+        return
+
+
+def _build_open_request_payload() -> dict:
+    open_request = _read_open_request()
+    open_confirm = _read_open_confirm()
+    status = "off"
+    if open_request.get("pending"):
+        status = "pending"
+    elif open_confirm.get("confirmed"):
+        status = "confirmed"
+    state = "on" if status in {"pending", "confirmed"} else "off"
+    payload = {
+        "state": state,
+        "status": status,
+    }
+    if open_request.get("requested_at"):
+        payload["requested_at"] = open_request.get("requested_at")
+    if open_confirm.get("expires_at"):
+        payload["confirmed_until"] = open_confirm.get("expires_at")
+    return payload
 
 def _refresh_static_values() -> None:
     if not os.path.isfile(STATIC_VALUES_SCRIPT):
@@ -215,6 +315,31 @@ def publish_discovery_binary(name, unique_id, coil_key, device_class=None):
     }
     if device_class:
         payload["device_class"] = device_class
+    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
+
+def publish_discovery_binary_template(
+    name,
+    unique_id,
+    value_template,
+    json_attributes_topic=None,
+    json_attributes_template=None,
+    device_class=None,
+):
+    config_topic = f"homeassistant/binary_sensor/{unique_id}/config"
+    payload = {
+        "name": name,
+        "state_topic": "dvi/measurement",
+        "value_template": value_template,
+        "unique_id": unique_id,
+        "device": _build_device_info(),
+    }
+    if device_class:
+        payload["device_class"] = device_class
+    if json_attributes_topic:
+        payload["json_attributes_topic"] = json_attributes_topic
+    if json_attributes_template:
+        payload["json_attributes_template"] = json_attributes_template
     mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
 
 def publish_discovery_number(name, unique_id, command_topic, state_template,
@@ -445,6 +570,7 @@ command_map = {
 #    "dvi/command/outdoorcal": {"register": 0x18D, "scale": 1}, 
     "dvi/command/curveset-12": {"dynamic_curve": "-12", "scale": 1},
     "dvi/command/curveset12": {"dynamic_curve": "12", "scale": 1},
+    "dvi/command/open_request": {"special": "open_request"},
 }
 
 # Map string payloads from HA selects to numeric register values
@@ -466,6 +592,19 @@ def on_message(client, userdata, msg):
         payload_str = msg.payload.decode().strip()
         cfg = command_map.get(topic)
         if not cfg:
+            return
+
+        if cfg.get("special") == "open_request":
+            action = payload_str.strip().lower()
+            if action == "confirm":
+                _write_open_confirm(_get_pump_id())
+                print("✅ Open request confirmed via MQTT")
+                return
+            if action == "close":
+                _write_open_close(_get_pump_id())
+                print("✅ Open request closed via MQTT")
+                return
+            print(f"⚠️ Unknown open_request action: {payload_str}")
             return
 
         # Handle HA Select payloads (e.g. "Off", "On", "Automatic")
@@ -687,6 +826,14 @@ def publish_all_discovery() -> None:
             unique_id=f"dvi_coil_{idx}",
             coil_key=label
         )
+
+    publish_discovery_binary_template(
+        name="Open request",
+        unique_id="dvi_open_request",
+        value_template="{{ 'ON' if value_json.open_request and value_json.open_request.state == 'on' else 'OFF' }}",
+        json_attributes_topic="dvi/measurement",
+        json_attributes_template="{{ value_json.open_request | default({}) | tojson }}",
+    )
 
     # FC04 sensors -> temperature sensors
     for key, label in active_fc04.items():
@@ -1249,6 +1396,7 @@ while True:
         "input_registers": dict(sorted(last_inputs.items())),
         "write_registers": dict(sorted(last_writes.items()))
     }
+    full_payload["open_request"] = _build_open_request_payload()
     # Eksponér pumpid, pump_type, SW-versioner + install/service date i measurement payload
     if PUMP_TYPE:
         full_payload["pump_type"] = PUMP_TYPE

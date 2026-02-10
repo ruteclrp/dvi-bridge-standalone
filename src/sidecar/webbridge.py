@@ -36,6 +36,10 @@ COMMANDS_PATH = "./../commands.json"
 STATE_POLL_INTERVAL = 1.0  # seconds
 TUNNEL_CONFIG_FILE = Path("/home/dviha/dvi-bridge/tunnel_config.json")
 DEVICE_REGISTRATION_FILE = Path("/home/dviha/dvi-bridge/device_registration.json")
+OPEN_REQUEST_FILE = Path("/home/dviha/dvi-bridge/open_request.json")
+OPEN_CONFIRM_FILE = Path("/home/dviha/dvi-bridge/open_confirm.json")
+OPEN_CLOSE_FILE = Path("/home/dviha/dvi-bridge/open_close.json")
+OPEN_CONFIRM_TTL = 15 * 60
 
 # -----------------------------------------------------------------------------
 # Device identification - just use os.getenv like bridge.py
@@ -116,6 +120,46 @@ def load_state_loop():
 threading.Thread(target=load_state_loop, daemon=True).start()
 print(f"✅ Reading state from {STATE_PATH}")
 print(f"✅ Device ID: {pump_id}")
+
+
+def _read_open_request() -> dict:
+    if not OPEN_REQUEST_FILE.exists():
+        return {"pending": False}
+    try:
+        payload = json.loads(OPEN_REQUEST_FILE.read_text())
+        payload["pending"] = bool(payload.get("pending"))
+        return payload
+    except Exception:
+        return {"pending": False}
+
+
+def _clear_open_request() -> None:
+    try:
+        if OPEN_REQUEST_FILE.exists():
+            OPEN_REQUEST_FILE.unlink()
+    except Exception:
+        return
+
+
+def _read_open_confirm() -> dict:
+    if not OPEN_CONFIRM_FILE.exists():
+        return {"confirmed": False}
+    try:
+        payload = json.loads(OPEN_CONFIRM_FILE.read_text())
+        confirmed_at = payload.get("confirmed_at")
+        if not confirmed_at:
+            return {"confirmed": False}
+        expires_at = int(confirmed_at) + OPEN_CONFIRM_TTL
+        if int(time.time()) >= expires_at:
+            OPEN_CONFIRM_FILE.unlink(missing_ok=True)
+            return {"confirmed": False, "expired": True}
+        return {
+            "confirmed": True,
+            "confirmed_at": int(confirmed_at),
+            "expires_at": expires_at,
+        }
+    except Exception:
+        return {"confirmed": False}
 
 # Load registration info if available
 registration_info = {}
@@ -405,6 +449,22 @@ def api_states():
         #     "attributes": {"unit_of_measurement": "°C", "friendly_name": "Cold side cold"}
         # }
         
+        open_request = _read_open_request()
+        open_confirm = _read_open_confirm()
+        open_status = "off"
+        if open_request.get("pending"):
+            open_status = "pending"
+        elif open_confirm.get("confirmed"):
+            open_status = "confirmed"
+        states_copy["binary_sensor.open_request"] = {
+            "state": "on" if open_status in {"pending", "confirmed"} else "off",
+            "attributes": {
+                "friendly_name": "Open request",
+                "status": open_status,
+                "confirmed_until": open_confirm.get("expires_at"),
+            },
+        }
+
         return jsonify(states_copy)
 
 @app.route("/api/pump_type")
@@ -488,6 +548,42 @@ def api_history(sensor_name):
             "sensor": sensor_name,
             "data": history[lookup_name]
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/open_request", methods=["GET"])
+def api_open_request():
+    return jsonify(_read_open_request())
+
+
+@app.route("/api/open_request/confirm", methods=["POST"])
+def api_open_request_confirm():
+    payload = {
+        "pump_id": pump_id,
+        "confirmed_at": int(time.time()),
+    }
+    try:
+        OPEN_CONFIRM_FILE.parent.mkdir(parents=True, exist_ok=True)
+        OPEN_CONFIRM_FILE.write_text(json.dumps(payload))
+        _clear_open_request()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/open_request/close", methods=["POST"])
+def api_open_request_close():
+    try:
+        payload = {
+            "pump_id": pump_id,
+            "closed_at": int(time.time()),
+        }
+        OPEN_CLOSE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        OPEN_CLOSE_FILE.write_text(json.dumps(payload))
+        OPEN_CONFIRM_FILE.unlink(missing_ok=True)
+        _clear_open_request()
+        return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

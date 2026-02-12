@@ -396,47 +396,46 @@ ha-card {
 	}
 }
 
+@media (min-width: 700px) and (max-width: 1024px) {
+	ha-card {
+		width: 100%;
+		box-sizing: border-box;
+	}
+
+	.mode-chips-bar,
+	.diagram {
+		max-width: 100%;
+	}
+}
+
 @media (max-height: 500px) and (orientation: landscape) {
 	ha-card {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto;
 		grid-template-rows: 1fr;
 		gap: 0;
-		align-items: start;
+		align-items: stretch;
 	}
 
 	.header {
 		display: none;
 	}
-			50% {
-				box-shadow: 0 0 0 6px rgba(255, 80, 80, 0);
-				background: rgba(255, 80, 80, 0.45);
-			}
-			100% {
-				box-shadow: 0 0 0 0 rgba(255, 80, 80, 0);
-				background: rgba(255, 80, 80, 0.25);
-			}
-		}
-
-		@keyframes open-confirm-pulse {
-			0% {
-				box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.6);
-				background: rgba(76, 175, 80, 0.25);
-			}
-			50% {
-				box-shadow: 0 0 0 6px rgba(76, 175, 80, 0);
-				background: rgba(76, 175, 80, 0.45);
-			}
-			100% {
-				box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
-				background: rgba(76, 175, 80, 0.25);
-			}
-
 	.diagram {
 		grid-column: 1;
 		grid-row: 1;
 		margin: 0;
-		max-width: 100%;
+		max-width: none;
+		width: 100%;
+		height: 100%;
+		aspect-ratio: auto;
+		background: #fff;
+		align-self: stretch;
+	}
+
+	.diagram-base {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
 	}
 
 	.mode-chips-bar {
@@ -447,16 +446,6 @@ ha-card {
 		justify-content: flex-start;
 		width: auto;
 		max-width: none;
-		.mode-chip--open-confirm {
-			border-color: rgba(76, 175, 80, 1);
-			background: rgba(76, 175, 80, 0.6);
-			color: #fff;
-			opacity: 1;
-		}
-
-		.mode-chip--open-confirm-active {
-			animation: open-confirm-pulse 1s infinite;
-		}
 		height: 100%;
 		align-self: stretch;
 		padding: 6px 8px;

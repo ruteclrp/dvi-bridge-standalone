@@ -420,6 +420,7 @@ ha-card {
 	.header {
 		display: none;
 	}
+
 	.diagram {
 		grid-column: 1;
 		grid-row: 1;

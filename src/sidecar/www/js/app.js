@@ -53,6 +53,21 @@ window.addEventListener("DOMContentLoaded", async () => {
   card.hass = hass;
   document.body.appendChild(card);
 
+  const isIpad = () =>
+    /iPad/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const updateIpadLayout = () => {
+    const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+    if (isIpad() && isLandscape) {
+      card.classList.add("ipad-landscape");
+    } else {
+      card.classList.remove("ipad-landscape");
+    }
+  };
+  updateIpadLayout();
+  window.addEventListener("resize", updateIpadLayout);
+  window.addEventListener("orientationchange", updateIpadLayout);
+
   setupPopupHandler(hass);
   overrideTempSensorClicks(card, hass);
 

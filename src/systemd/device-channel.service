@@ -9,6 +9,8 @@ WorkingDirectory=/home/dviha/dvi-bridge
 ExecStart=/home/dviha/dvi-bridge/venv/bin/python /home/dviha/dvi-bridge/sidecar/device_channel.py
 Restart=on-failure
 RestartSec=5s
+StartLimitIntervalSec=0
+Restart=always
 
 [Install]
 WantedBy=multi-user.target

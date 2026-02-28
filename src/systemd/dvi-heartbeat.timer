@@ -1,0 +1,11 @@
+[Unit]
+Description=Run DVI heartbeat every 2 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+Unit=dvi-heartbeat.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

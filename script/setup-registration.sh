@@ -100,26 +100,27 @@ else
 fi
 
 echo ""
-echo "[5/6] Installing systemd service..."
-cp "$PROJECT_ROOT/dvi-bridge/systemd/dvi-tunnel.service" /etc/systemd/system/
+echo "[5/6] Installing systemd units..."
+SYSTEMD_SRC="$PROJECT_ROOT/dvi-bridge/systemd"
+cp "$SYSTEMD_SRC/dvi-tunnel.service" /etc/systemd/system/
+cp "$SYSTEMD_SRC/device-channel.service" /etc/systemd/system/
+cp "$SYSTEMD_SRC/dvi-tunnels-ready.service" /etc/systemd/system/
+cp "$SYSTEMD_SRC/dvi-heartbeat.service" /etc/systemd/system/
+cp "$SYSTEMD_SRC/dvi-heartbeat.timer" /etc/systemd/system/
+cp "$SYSTEMD_SRC/dvi-tunnel-watchdog.service" /etc/systemd/system/
+cp "$SYSTEMD_SRC/dvi-tunnel-watchdog.timer" /etc/systemd/system/
 systemctl daemon-reload
-echo "  ✓ Systemd service installed"
+echo "  ✓ Systemd units installed"
 
 echo ""
-echo "[6/6] Installing heartbeat cron job..."
+echo "[6/6] Removing legacy heartbeat cron (if present)..."
 CRON_FILE="/etc/cron.d/dvi-heartbeat"
-HEARTBEAT_SCRIPT="$PROJECT_ROOT/dvi-bridge/sidecar/heartbeat.py"
-PYTHON_CMD="/usr/bin/python3"
-if [ -x "/home/dviha/dvi-bridge/venv/bin/python" ]; then
-    PYTHON_CMD="/home/dviha/dvi-bridge/venv/bin/python"
-elif [ -x "$PROJECT_ROOT/dvi-bridge/.venv/bin/python" ]; then
-    PYTHON_CMD="$PROJECT_ROOT/dvi-bridge/.venv/bin/python"
+if [ -f "$CRON_FILE" ]; then
+    rm -f "$CRON_FILE"
+    echo "  ✓ Removed legacy cron job (${CRON_FILE})"
+else
+    echo "  ✓ No legacy cron job found"
 fi
-cat > "$CRON_FILE" <<EOF
-*/2 * * * * root "$PYTHON_CMD" "$HEARTBEAT_SCRIPT" >> /var/log/dvi-heartbeat.log 2>&1
-EOF
-chmod 644 "$CRON_FILE"
-echo "  ✓ Cron job installed (${CRON_FILE})"
 
 echo ""
 echo "=========================================="
@@ -134,12 +135,16 @@ echo ""
 echo "2. Register this device with the backend:"
 echo "   sudo /home/dviha/dvi-bridge/venv/bin/python /home/dviha/dvi-bridge/sidecar/registration.py"
 echo ""
-echo "3. Enable tunnel to start on boot:"
-echo "   sudo systemctl enable dvi-tunnel"
-echo "   sudo systemctl start dvi-tunnel"
+echo "3. Enable startup sequence (tunnels + readiness gate + timers):"
+echo "   sudo systemctl enable dvi-tunnel device-channel dvi-tunnels-ready"
+echo "   sudo systemctl enable dvi-heartbeat.timer dvi-tunnel-watchdog.timer"
+echo "   sudo systemctl start dvi-tunnel device-channel"
+echo "   sudo systemctl start dvi-tunnels-ready"
+echo "   sudo systemctl start dvi-heartbeat.timer dvi-tunnel-watchdog.timer"
 echo ""
-echo "4. Check tunnel status:"
-echo "   sudo systemctl status dvi-tunnel"
+echo "4. Check service status:"
+echo "   sudo systemctl status dvi-tunnel device-channel dvi-tunnels-ready"
+echo "   sudo systemctl status dvi-heartbeat.timer dvi-tunnel-watchdog.timer"
 echo ""
 echo "5. Start or restart your bridge and webbridge services"
 echo ""

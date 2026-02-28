@@ -61,7 +61,9 @@ This will:
 - Install Python dependencies
 - Create configuration directories
 - Copy .env to /etc/dvi-bridge/
-- Install heartbeat cron job (every 2 minutes)
+- Install `systemd` units for tunnel sequencing
+- Install heartbeat timer (every 2 minutes)
+- Install tunnel watchdog timer (every 1 minute)
 
 ### 3. Register Device
 
@@ -78,7 +80,18 @@ This will:
 
 ### 4. Start Services
 
-Enable the tunnel and start or restart your bridge and webbridge services as needed.
+Enable and start services in this order:
+
+```bash
+sudo systemctl enable dvi-tunnel device-channel dvi-tunnels-ready
+sudo systemctl enable dvi-heartbeat.timer dvi-tunnel-watchdog.timer
+
+sudo systemctl start dvi-tunnel device-channel
+sudo systemctl start dvi-tunnels-ready
+sudo systemctl start dvi-heartbeat.timer dvi-tunnel-watchdog.timer
+```
+
+This ensures heartbeat waits until both tunnel services are active.
 
 ## Configuration Files
 
@@ -141,10 +154,10 @@ pump_id (required)
 status (optional)
 ```
 
-The setup script installs a cron job at `/etc/cron.d/dvi-heartbeat` that calls:
+The setup script installs `systemd` timer `dvi-heartbeat.timer` which triggers:
 
 ```bash
-python3 src/sidecar/heartbeat.py
+python /home/dviha/dvi-bridge/sidecar/heartbeat.py
 ```
 
 This runs every 2 minutes and uses the same Cloudflare Access headers as registration.
@@ -169,6 +182,10 @@ HEARTBEAT_BASE_URL=http://<pi-ip>:8000
 - Wait 1-2 minutes for DNS propagation
 - Check cloudflared logs: `sudo journalctl -u dvi-tunnel -f`
 - Verify heatpump web interface is running on localhost:8080
+
+### Tunnel or channel becomes unstable later
+- Check watchdog logs: `sudo journalctl -u dvi-tunnel-watchdog.service -f`
+- Verify timers: `sudo systemctl status dvi-heartbeat.timer dvi-tunnel-watchdog.timer`
 
 ### Device ID changes between reboots
 - MAC address method failed, falling back to UUID
@@ -206,7 +223,13 @@ All three services should run simultaneously.
       └── credentials.json      # Tunnel credentials
 
 /etc/systemd/system/
-  └── dvi-tunnel.service        # Systemd service
+  ├── dvi-tunnel.service                # Owner tunnel
+  ├── device-channel.service            # Device backend channel
+  ├── dvi-tunnels-ready.service         # Readiness gate
+  ├── dvi-heartbeat.service             # Heartbeat sender
+  ├── dvi-heartbeat.timer               # Heartbeat scheduler
+  ├── dvi-tunnel-watchdog.service       # Tunnel watchdog
+  └── dvi-tunnel-watchdog.timer         # Watchdog scheduler
 
 /usr/local/bin/
   └── cloudflared               # Cloudflared binary
@@ -216,7 +239,7 @@ All three services should run simultaneously.
 
 After successful registration:
 1. Access your heatpump at the provided owner URL
-2. Monitor tunnel health via systemd logs
+2. Monitor tunnel health via `dvi-tunnel` and `dvi-tunnel-watchdog` logs
 3. Set up Cloudflare Access policies (optional) for additional security
 
 ## Support

@@ -40,6 +40,7 @@ BRIDGE_BASE = Path("/home/dviha/dvi-bridge")
 OPEN_REQUEST_FILE = BRIDGE_BASE / "open_request.json"
 OPEN_CONFIRM_FILE = BRIDGE_BASE / "open_confirm.json"
 OPEN_CLOSE_FILE = BRIDGE_BASE / "open_close.json"
+OPEN_REQUEST_TTL = int(os.getenv("OPEN_REQUEST_TTL", "900"))
 OPEN_CONFIRM_TTL = 15 * 60
 
 
@@ -49,6 +50,12 @@ def _read_open_request() -> dict:
     try:
         payload = json.loads(OPEN_REQUEST_FILE.read_text())
         payload["pending"] = bool(payload.get("pending"))
+        requested_at = payload.get("requested_at")
+        if payload["pending"] and requested_at:
+            expires_at = int(requested_at) + OPEN_REQUEST_TTL
+            if int(time.time()) >= expires_at:
+                OPEN_REQUEST_FILE.unlink(missing_ok=True)
+                return {"pending": False, "expired": True}
         return payload
     except Exception:
         return {"pending": False}

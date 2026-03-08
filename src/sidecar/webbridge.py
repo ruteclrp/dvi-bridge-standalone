@@ -737,14 +737,6 @@ def _compute_usage_delta(start_totals, end_totals):
             delta[key] = round(diff, 1)
         else:
             delta[key] = int(round(diff))
-
-    running_sum = 0.0
-    has_running_val = False
-    for key in ("comp_hours", "vv_hours", "heating_hours"):
-        if delta[key] is not None:
-            running_sum += delta[key]
-            has_running_val = True
-    delta["running_hours_total"] = int(round(running_sum)) if has_running_val else None
     delta["reset_detected"] = reset_detected
     return delta
 

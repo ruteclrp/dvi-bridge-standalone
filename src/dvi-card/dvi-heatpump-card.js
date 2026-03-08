@@ -9,6 +9,8 @@ class DviHeatpumpCard extends HTMLElement {
 		super();
 		this._heatCurveConfigKey = "";
 		this._pumpType = "AW"; // Default to AW
+		this._alarmLatched = false;
+		this._alarmWasActive = false;
 	}
 
 	async _fetchPumpType() {
@@ -68,8 +70,15 @@ class DviHeatpumpCard extends HTMLElement {
         <div class="header" id="card-header"></div>
         <div class="mode-chips-bar" id="mode-chips-bar"></div>
         <div class="diagram" id="diagram"></div>
+				<div class="alarm-overlay" id="alarm-overlay" aria-hidden="true">
+					<div class="alarm-overlay__popup" role="alert" aria-live="assertive">
+						<div class="alarm-overlay__text">ALARM</div>
+						<button class="alarm-overlay__ack" id="alarm-ack" type="button">Acknowledge</button>
+					</div>
+				</div>
       </ha-card>
     `;
+		this._bindAlarmControls();
 		this._updateHeader();
 		this._fetchPumpType(); // Try to fetch pump type after config is set
 	}
@@ -107,6 +116,72 @@ class DviHeatpumpCard extends HTMLElement {
 		bindIconHooks(diagram, view.iconEntityMap, this);
 		wireModeChips(modeChipsBar, this._hass, view.chipGroups);
 		this._bindHeatCurveTrigger(modeChipsBar);
+		this._renderAlarmOverlay();
+	}
+
+	_renderAlarmOverlay() {
+		const overlay = this._root?.getElementById("alarm-overlay");
+		if (!overlay) return;
+
+		const active = this._isSumAlarmActive();
+		if (active && !this._alarmWasActive) {
+			this._alarmLatched = true;
+		}
+
+		this._alarmWasActive = active;
+		this._setAlarmOverlayVisible(this._alarmLatched);
+	}
+
+	_setAlarmOverlayVisible(visible) {
+		const overlay = this._root?.getElementById("alarm-overlay");
+		if (!overlay) return;
+
+		overlay.classList.toggle("alarm-overlay--active", visible);
+		overlay.setAttribute("aria-hidden", visible ? "false" : "true");
+	}
+
+	_bindAlarmControls() {
+		const acknowledgeButton = this._root?.getElementById("alarm-ack");
+		if (!acknowledgeButton) return;
+
+		acknowledgeButton.onclick = async () => {
+			this._alarmLatched = false;
+			this._setAlarmOverlayVisible(false);
+
+			if (!this._hass?.connection) {
+				try {
+					await fetch("/api/alarm/sumalarm/ack", { method: "POST" });
+					if (this._hass?.refresh) {
+						await this._hass.refresh();
+						this.hass = this._hass;
+					}
+				} catch (error) {
+					console.warn("Could not acknowledge sidecar alarm latch:", error);
+				}
+			}
+		};
+	}
+
+	_isSumAlarmActive() {
+		const entityId = this._resolveSumAlarmEntityId();
+		if (!entityId || !this._hass?.states?.[entityId]) return false;
+
+		const state = String(this._hass.states[entityId].state).toLowerCase();
+		return state === "on" || state === "1" || state === "true" || state === "alarm";
+	}
+
+	_resolveSumAlarmEntityId() {
+		const configuredEntityId = this._config?.sumalarm || this._config?.sum_alarm_failure;
+		if (configuredEntityId && this._hass?.states?.[configuredEntityId]) {
+			return configuredEntityId;
+		}
+
+		const stateIds = Object.keys(this._hass?.states || {});
+		return (
+			stateIds.find((entityId) => entityId.endsWith(".sum_alarm_failure")) ||
+			stateIds.find((entityId) => entityId.endsWith(".sumalarm")) ||
+			null
+		);
 	}
 
 	_bindHeatCurveTrigger(diagram) {

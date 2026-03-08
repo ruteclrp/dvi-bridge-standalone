@@ -58,6 +58,7 @@ states = {}
 pump_type = "AW"  # Default to AW, will be updated from state.json
 state_lock = threading.Lock()
 commands_lock = threading.Lock()
+sumalarm_latched = False
 
 # Initialize empty HA-style state objects
 for entity_id, cfg in ENTITY_MAP.items():
@@ -71,7 +72,7 @@ for entity_id, cfg in ENTITY_MAP.items():
     }
 
 def load_state_loop():
-    global pump_type
+    global pump_type, sumalarm_latched
     last_mtime = 0
 
     while True:
@@ -110,6 +111,8 @@ def load_state_loop():
                             value = mapping.get(int(value), str(value))
 
                         states[entity_id]["state"] = value
+                        if entity_id == "binary_sensor.sum_alarm_failure" and value == "on":
+                            sumalarm_latched = True
 
                 last_mtime = stat.st_mtime
 
@@ -439,24 +442,9 @@ def api_tunnel():
 
 @app.route("/api/states")
 def api_states():
+    global sumalarm_latched
     with state_lock:
         states_copy = states.copy()
-        
-        # TESTING OVERRIDE: Force geothermal pump on for BW testing
-        # Uncomment the following lines to test BW mode with brine circulation active
-        # if "binary_sensor.circ_pump_geothermal" in states_copy:
-        #     states_copy["binary_sensor.circ_pump_geothermal"]["state"] = "on"
-        
-        # TESTING OVERRIDE: Add fake BW temperature sensors for testing
-        # Uncomment the following lines to test BW cold side temperatures
-        # states_copy["sensor.cold_side_warm_temp"] = {
-        #     "state": "8.5",
-        #     "attributes": {"unit_of_measurement": "°C", "friendly_name": "Cold side warm"}
-        # }
-        # states_copy["sensor.cold_side_cold_temp"] = {
-        #     "state": "2.3",
-        #     "attributes": {"unit_of_measurement": "°C", "friendly_name": "Cold side cold"}
-        # }
         
         open_request = _read_open_request()
         open_confirm = _read_open_confirm()
@@ -474,13 +462,28 @@ def api_states():
             },
         }
 
+        if sumalarm_latched:
+            current_alarm = states_copy.get("binary_sensor.sum_alarm_failure", {})
+            attributes = dict(current_alarm.get("attributes", {}))
+            attributes["latched"] = True
+            states_copy["binary_sensor.sum_alarm_failure"] = {
+                "state": "on",
+                "attributes": attributes,
+            }
+
         return jsonify(states_copy)
+
+
+@app.route("/api/alarm/sumalarm/ack", methods=["POST"])
+def api_ack_sumalarm():
+    global sumalarm_latched
+    with state_lock:
+        sumalarm_latched = False
+    return jsonify({"status": "ok"})
 
 @app.route("/api/pump_type")
 def api_pump_type():
     """Return the detected pump type (AW or BW)"""
-    # TESTING OVERRIDE: Uncomment the next line to force BW mode in frontend
-    # return jsonify({"pump_type": "BW"})
     return jsonify({"pump_type": pump_type})
 
 

@@ -33,6 +33,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     comp_icon: "binary_sensor.soft_starter_compressor",
     cv_pump_icon: "binary_sensor.circ_pump_cv",
     defrost_icon: "binary_sensor.four_way_valve_defrost",
+    sumalarm: "binary_sensor.sum_alarm_failure",
     open_request_entity: "binary_sensor.open_request",
     cv_curve_number: "number.cv_curve",
     curve_set_minus12_number: "number.curve_set_minus12",
@@ -176,17 +177,13 @@ function applyChartDarkMode() {
   Object.setPrototypeOf(window.Chart, OriginalChart);
   Object.assign(window.Chart, OriginalChart);
   window.Chart._darkModePatched = true;
-  console.log("✅ Chart.js dark mode applied");
 }
 
 function overrideTempSensorClicks(card, hass) {
-  console.log("🔧 overrideTempSensorClicks called");
   const shadowRoot = card.shadowRoot;
   if (!shadowRoot) {
-    console.log("❌ No shadowRoot found");
     return;
   }
-  console.log("✅ shadowRoot found");
 
   const keyToEntityMap = {
     outdoor: { entityId: "sensor.outdoor_temp", historyKey: "outdoor_temp" },
@@ -204,35 +201,25 @@ function overrideTempSensorClicks(card, hass) {
   function overrideHandlers() {
     const diagram = shadowRoot.querySelector(".diagram");
     if (!diagram) {
-      console.log("⏳ Diagram not yet ready");
       return;
     }
 
-    const allLabels = diagram.querySelectorAll(".diagram-label");
     const clickableLabels = diagram.querySelectorAll(".diagram-label.clickable");
-    console.log(`🔍 Found ${allLabels.length} total labels, ${clickableLabels.length} clickable`);
 
     let overriddenCount = 0;
     clickableLabels.forEach(label => {
       const dataKey = label.getAttribute("data-key");
-      console.log(`  - Label with data-key: ${dataKey}, clickable: ${label.classList.contains("clickable")}`);
 
       const mapping = keyToEntityMap[dataKey];
       if (!dataKey || !mapping) {
-        console.log("    ⏭️ Skipping (not in temperature sensor list)");
         return;
       }
       if (label._historyOverridden) {
-        console.log("    ⏭️ Already overridden");
         return;
       }
       label._historyOverridden = true;
 
-      const oldHandler = label.onclick;
-      console.log(`    📝 Old handler: ${oldHandler ? "exists" : "null"}`);
-
       label.onclick = e => {
-        console.log(`🖱️ Click detected on ${dataKey}!`);
         e.preventDefault();
         e.stopPropagation();
 
@@ -248,21 +235,14 @@ function overrideTempSensorClicks(card, hass) {
           }
         });
       };
-
-      console.log(`    ✅ Override installed for ${dataKey}`);
       overriddenCount++;
     });
-
-    if (overriddenCount > 0) {
-      console.log(`✅ Overrode ${overriddenCount} temperature sensor click handlers`);
-    }
 
     const defrostIcon = diagram.querySelector('[data-icon-key="defrost"]');
     if (defrostIcon && !defrostIcon._defrostOverridden) {
       defrostIcon._defrostOverridden = true;
       defrostIcon.classList.add("clickable");
       defrostIcon.onclick = e => {
-        console.log("🖱️ Click detected on defrost icon!");
         e.preventDefault();
         e.stopPropagation();
 
@@ -275,7 +255,6 @@ function overrideTempSensorClicks(card, hass) {
           }
         });
       };
-      console.log("✅ Defrost icon click handler installed");
     }
 
     const auxIcons = diagram.querySelectorAll('[data-icon-key="aux"]');
@@ -284,7 +263,6 @@ function overrideTempSensorClicks(card, hass) {
         auxIcon._auxOverridden = true;
         auxIcon.classList.add("clickable");
         auxIcon.onclick = e => {
-          console.log("🖱️ Click detected on aux icon!");
           e.preventDefault();
           e.stopPropagation();
 
@@ -297,13 +275,11 @@ function overrideTempSensorClicks(card, hass) {
             }
           });
         };
-        console.log("✅ Aux icon click handler installed");
       }
     });
   }
 
-  const observer = new MutationObserver(mutations => {
-    console.log(`🔄 MutationObserver triggered (${mutations.length} mutations)`);
+  const observer = new MutationObserver(() => {
     overrideHandlers();
   });
 
@@ -312,7 +288,6 @@ function overrideTempSensorClicks(card, hass) {
     subtree: true
   });
 
-  console.log("👀 MutationObserver installed");
   overrideHandlers();
 }
 
@@ -378,7 +353,6 @@ function setupPopupHandler(hass) {
         if (modalContent) {
           modalContent.style.setProperty('max-width', '90vw', 'important');
           modalContent.style.setProperty('width', 'fit-content', 'important');
-          console.log('Modal content styles set:', modalContent.style.maxWidth, modalContent.style.width);
         }
       })();
 

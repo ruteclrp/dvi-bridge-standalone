@@ -4,7 +4,11 @@
 }
 
 ha-card {
+	display: block;
+	width: 100%;
 	padding: 0;
+	position: relative;
+	overflow: hidden;
 }
 
 .header {
@@ -39,6 +43,92 @@ ha-card {
 	aspect-ratio: 550 / 380;
 	/* Ensure no extra spacing from box model */
 	line-height: 0;
+}
+
+/* ============ Alarm Overlay ============ */
+.alarm-overlay {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.2s ease;
+	z-index: 50;
+}
+
+.alarm-overlay--active {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.alarm-overlay__popup {
+	width: 75%;
+	height: 75%;
+	container-type: size;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 1rem;
+	padding: 4%;
+	box-sizing: border-box;
+	background: rgba(32, 0, 0, 0.45);
+	border: 3px solid rgba(255, 0, 0, 0.85);
+	border-radius: 18px;
+	box-shadow: 0 0 24px rgba(255, 0, 0, 0.35);
+	backdrop-filter: blur(2px);
+	-webkit-backdrop-filter: blur(2px);
+	text-align: center;
+	overflow: hidden;
+}
+
+.alarm-overlay__text {
+	color: #ff1e1e;
+	font-weight: 900;
+	line-height: 0.9;
+	letter-spacing: 0.04em;
+	text-align: center;
+	white-space: nowrap;
+	font-size: min(28cqw, 55cqh, 7rem);
+	animation: alarm-flash 1s steps(2, end) infinite;
+	text-shadow: 0 0 10px rgba(255, 0, 0, 0.55);
+	max-width: 100%;
+	max-height: 100%;
+	transform-origin: center;
+}
+
+.alarm-overlay__ack {
+	padding: 0.7rem 1.4rem;
+	border: 2px solid rgba(255, 255, 255, 0.6);
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.14);
+	color: #fff;
+	font-size: min(8cqw, 1rem);
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	cursor: pointer;
+	text-transform: uppercase;
+	transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.alarm-overlay__ack:hover,
+.alarm-overlay__ack:focus-visible {
+	background: rgba(255, 255, 255, 0.24);
+	border-color: rgba(255, 255, 255, 0.9);
+	outline: none;
+}
+
+@keyframes alarm-flash {
+	0%,
+	49.999% {
+		opacity: 1;
+	}
+	50%,
+	100% {
+		opacity: 0.15;
+	}
 }
 
 .diagram-base {

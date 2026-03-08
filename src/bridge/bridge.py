@@ -12,6 +12,7 @@ import glob
 import subprocess
 import socket  # <-- nødvendig til _get_default_gateway_linux
 import tempfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -35,6 +36,8 @@ STATIC_VALUES_SCRIPT = os.path.join(SCRIPT_DIR, "read_static_values_modbustk.py"
 HISTORY_FILE = os.path.join(SCRIPT_DIR, "sensor_history.json")
 HISTORY_MAX_AGE = 86400  # 24 hours in seconds
 HISTORY_SAMPLE_INTERVAL = 15  # Sample every 15 seconds
+USAGE_DAILY_FILE = os.path.join(SCRIPT_DIR, "meter_usage_daily.json")
+USAGE_DAILY_RETENTION_DAYS = 400
 
 BRIDGE_BASE = Path("/home/dviha/dvi-bridge")
 OPEN_REQUEST_FILE = BRIDGE_BASE / "open_request.json"
@@ -690,6 +693,115 @@ def save_history_sample(sensors_dict):
         json.dump(history, tmp)
         tmp_path = tmp.name
     os.replace(tmp_path, HISTORY_FILE)
+
+def _safe_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+def _safe_int(value):
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+def _safe_energy(value):
+    try:
+        return round(float(value), 1)
+    except (TypeError, ValueError):
+        return None
+
+def load_daily_usage_history():
+    """Load daily meter snapshots keyed by date (YYYY-MM-DD)."""
+    if os.path.exists(USAGE_DAILY_FILE):
+        try:
+            with open(USAGE_DAILY_FILE, "r") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return {}
+
+def save_daily_usage_snapshot(last_inputs, last_writes, now_ts=None):
+    """Persist daily cumulative meter snapshots (first + hourly latest)."""
+    if now_ts is None:
+        now_ts = time.time()
+
+    snapshot = {
+        "comp_hours": _safe_int(last_writes.get("comp_hours")),
+        "vv_hours": _safe_int(last_writes.get("vv_hours")),
+        "heating_hours": _safe_int(last_writes.get("heating_hours")),
+        "em23_energy": _safe_energy(last_inputs.get("em23_energy")),
+    }
+
+    if all(v is None for v in snapshot.values()):
+        return
+
+    now_dt = datetime.fromtimestamp(now_ts)
+    date_key = now_dt.strftime("%Y-%m-%d")
+    usage_history = load_daily_usage_history()
+    existing = usage_history.get(date_key)
+
+    # Backward compatibility: convert legacy flat format to nested first/latest format
+    if isinstance(existing, dict) and "first" not in existing and "latest" not in existing:
+        existing = {
+            "first": {
+                "comp_hours": _safe_int(existing.get("comp_hours")),
+                "vv_hours": _safe_int(existing.get("vv_hours")),
+                "heating_hours": _safe_int(existing.get("heating_hours")),
+                "em23_energy": _safe_energy(existing.get("em23_energy")),
+            },
+            "latest": {
+                "comp_hours": _safe_int(existing.get("comp_hours")),
+                "vv_hours": _safe_int(existing.get("vv_hours")),
+                "heating_hours": _safe_int(existing.get("heating_hours")),
+                "em23_energy": _safe_energy(existing.get("em23_energy")),
+            },
+            "updated_at": int(existing.get("updated_at") or now_ts),
+            "hourly": {},
+        }
+
+    if not isinstance(existing, dict) or "first" not in existing or "latest" not in existing:
+        usage_history[date_key] = {
+            "first": dict(snapshot),
+            "latest": dict(snapshot),
+            "updated_at": int(now_ts),
+            "hourly": {now_dt.strftime("%H"): dict(snapshot)},
+        }
+    else:
+        # Update latest at most once per hour to avoid high write frequency
+        updated_at = existing.get("updated_at")
+        should_update_latest = True
+        if updated_at:
+            try:
+                prev_dt = datetime.fromtimestamp(int(updated_at))
+                should_update_latest = prev_dt.strftime("%Y-%m-%d-%H") != now_dt.strftime("%Y-%m-%d-%H")
+            except Exception:
+                should_update_latest = True
+
+        if should_update_latest:
+            existing["latest"] = dict(snapshot)
+            existing["updated_at"] = int(now_ts)
+            hourly = existing.get("hourly") if isinstance(existing.get("hourly"), dict) else {}
+            hourly[now_dt.strftime("%H")] = dict(snapshot)
+            existing["hourly"] = hourly
+
+        usage_history[date_key] = existing
+
+    # Keep only newest N days
+    sorted_dates = sorted(usage_history.keys())
+    if len(sorted_dates) > USAGE_DAILY_RETENTION_DAYS:
+        dates_to_remove = sorted_dates[: len(sorted_dates) - USAGE_DAILY_RETENTION_DAYS]
+        for d in dates_to_remove:
+            usage_history.pop(d, None)
+
+    usage_dir = os.path.dirname(os.path.abspath(USAGE_DAILY_FILE))
+    with tempfile.NamedTemporaryFile(mode="w", dir=usage_dir, delete=False) as tmp:
+        json.dump(usage_history, tmp)
+        tmp_path = tmp.name
+    os.replace(tmp_path, USAGE_DAILY_FILE)
 
 def process_file_commands():
     """Read commands.json, execute all select and number commands, remove processed"""
@@ -1395,6 +1507,9 @@ while True:
                 for k, v in history_sensors.items()
             ])
             print(f"📊 History sample: {sensor_list}")
+
+        # Persist daily cumulative meter snapshots for usage popup summaries
+        save_daily_usage_snapshot(last_inputs, last_writes, now)
         last_history_sample = now
 
     # Final payload from cached values

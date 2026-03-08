@@ -1,6 +1,7 @@
 import "../dvi-card/dvi-heatpump-card.js";
 import "../dvi-card/dvi/heat_curve_card.js";
 import "../dvi-card/dvi/history_card.js";
+import "./usage_summary_card.js";
 import { HassAdapter } from "../hass-adapter.js";
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -70,6 +71,7 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   setupPopupHandler(hass);
   overrideTempSensorClicks(card, hass);
+  ensureUsageChip(card, hass);
 
   const chartInterval = setInterval(() => {
     if (window.Chart && !window.Chart._darkModePatched) {
@@ -81,6 +83,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   setInterval(async () => {
     await hass.refresh();
     card.hass = hass;
+    ensureUsageChip(card, hass);
   }, 2000);
 
   const closeOpenSession = () => {
@@ -98,6 +101,41 @@ window.addEventListener("DOMContentLoaded", async () => {
 
   window.addEventListener("beforeunload", closeOpenSession);
 });
+
+function ensureUsageChip(card, hass) {
+  const shadowRoot = card?.shadowRoot;
+  if (!shadowRoot) return;
+
+  const modeBar = shadowRoot.getElementById("mode-chips-bar");
+  if (!modeBar) return;
+
+  if (modeBar.querySelector("[data-sidecar-usage-trigger]")) return;
+
+  const usageChip = document.createElement("div");
+  usageChip.className = "mode-chip mode-chip--info mode-chip--active clickable";
+  usageChip.setAttribute("data-sidecar-usage-trigger", "true");
+  usageChip.innerHTML = `
+    <ha-icon icon="mdi:chart-box-outline"></ha-icon>
+    <span class="chip-label">Forbrug</span>
+  `;
+
+  usageChip.onclick = () => {
+    hass.popupCallback({
+      title: "Forbrugsoversigt",
+      content: {
+        type: "custom:usage-summary-card",
+        default_range: "today"
+      }
+    });
+  };
+
+  const infoChip = modeBar.querySelector('[data-popup="info"]');
+  if (infoChip?.nextSibling) {
+    modeBar.insertBefore(usageChip, infoChip.nextSibling);
+  } else {
+    modeBar.appendChild(usageChip);
+  }
+}
 
 function applyChartDarkMode() {
   if (!window.Chart || window.Chart._darkModePatched) return;
@@ -343,6 +381,29 @@ function setupPopupHandler(hass) {
           console.log('Modal content styles set:', modalContent.style.maxWidth, modalContent.style.width);
         }
       })();
+
+      modal.classList.add("active");
+      return;
+    }
+
+    if (content && content.type === "custom:usage-summary-card") {
+      modalTitle.textContent = title || "Forbrugsoversigt";
+
+      const usageCard = document.createElement("usage-summary-card");
+      usageCard.setConfig({
+        default_range: content.default_range || "today"
+      });
+      usageCard.hass = hass;
+
+      modalBody.innerHTML = "";
+      modalBody.appendChild(usageCard);
+
+      const modalContent = document.querySelector('.modal-content');
+      if (modalContent) {
+        modalContent.style.width = 'min(560px, 95vw)';
+        modalContent.style.minWidth = 'unset';
+        modalContent.style.maxWidth = '95vw';
+      }
 
       modal.classList.add("active");
       return;

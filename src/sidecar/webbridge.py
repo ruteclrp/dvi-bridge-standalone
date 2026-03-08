@@ -5,6 +5,7 @@ import threading
 import time
 import tempfile
 import subprocess
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -33,6 +34,7 @@ HTTP_PORT = 5000
 
 STATE_PATH = "./../state.json"
 COMMANDS_PATH = "./../commands.json"
+USAGE_DAILY_PATH = "./../meter_usage_daily.json"
 STATE_POLL_INTERVAL = 1.0  # seconds
 TUNNEL_CONFIG_FILE = Path("/home/dviha/dvi-bridge/tunnel_config.json")
 DEVICE_REGISTRATION_FILE = Path("/home/dviha/dvi-bridge/device_registration.json")
@@ -557,6 +559,256 @@ def api_history(sensor_name):
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+def _to_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_int(value):
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+
+def _to_energy(value):
+    try:
+        return round(float(value), 1)
+    except (TypeError, ValueError):
+        return None
+
+
+def _load_daily_usage_snapshots():
+    if not os.path.exists(USAGE_DAILY_PATH):
+        return {}
+    try:
+        with open(USAGE_DAILY_PATH, "r") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _sorted_snapshot_dates(snapshots):
+    valid_dates = []
+    for key in snapshots.keys():
+        try:
+            valid_dates.append(datetime.strptime(key, "%Y-%m-%d").date())
+        except ValueError:
+            continue
+    return sorted(valid_dates)
+
+
+def _snapshot_for_date(snapshots, snapshot_date):
+    rec = snapshots.get(snapshot_date.strftime("%Y-%m-%d"))
+    if not isinstance(rec, dict):
+        return None
+
+    # New format stores nested first/latest snapshots
+    if "latest" in rec and isinstance(rec.get("latest"), dict):
+        rec = rec.get("latest")
+
+    return {
+        "comp_hours": _to_int(rec.get("comp_hours")),
+        "vv_hours": _to_int(rec.get("vv_hours")),
+        "heating_hours": _to_int(rec.get("heating_hours")),
+        "em23_energy": _to_energy(rec.get("em23_energy")),
+    }
+
+
+def _first_snapshot_for_date(snapshots, snapshot_date):
+    rec = snapshots.get(snapshot_date.strftime("%Y-%m-%d"))
+    if not isinstance(rec, dict):
+        return None
+
+    # New format: explicit first snapshot
+    if "first" in rec and isinstance(rec.get("first"), dict):
+        first = rec.get("first")
+        return {
+            "comp_hours": _to_int(first.get("comp_hours")),
+            "vv_hours": _to_int(first.get("vv_hours")),
+            "heating_hours": _to_int(first.get("heating_hours")),
+            "em23_energy": _to_energy(first.get("em23_energy")),
+        }
+
+    # Legacy format fallback
+    return {
+        "comp_hours": _to_int(rec.get("comp_hours")),
+        "vv_hours": _to_int(rec.get("vv_hours")),
+        "heating_hours": _to_int(rec.get("heating_hours")),
+        "em23_energy": _to_energy(rec.get("em23_energy")),
+    }
+
+
+def _latest_snapshot_on_or_before(snapshots, sorted_dates, target_date):
+    for d in reversed(sorted_dates):
+        if d <= target_date:
+            rec = _snapshot_for_date(snapshots, d)
+            if rec is not None:
+                return d, rec
+    return None, None
+
+
+def _latest_snapshot_before(snapshots, sorted_dates, target_date):
+    for d in reversed(sorted_dates):
+        if d < target_date:
+            rec = _snapshot_for_date(snapshots, d)
+            if rec is not None:
+                return d, rec
+    return None, None
+
+
+def _earliest_snapshot_in_range(snapshots, sorted_dates, start_date, end_date):
+    for d in sorted_dates:
+        if d < start_date:
+            continue
+        if d > end_date:
+            break
+        rec = _first_snapshot_for_date(snapshots, d)
+        if rec is not None:
+            return d, rec
+    return None, None
+
+
+def _range_bounds(range_key, today):
+    if range_key == "today":
+        return today, today
+    if range_key == "yesterday":
+        y = today - timedelta(days=1)
+        return y, y
+    if range_key == "this_week":
+        start = today - timedelta(days=today.weekday())
+        return start, today
+    if range_key == "last_week":
+        this_week_start = today - timedelta(days=today.weekday())
+        start = this_week_start - timedelta(days=7)
+        end = this_week_start - timedelta(days=1)
+        return start, end
+    if range_key == "this_month":
+        start = today.replace(day=1)
+        return start, today
+    if range_key == "last_month":
+        this_month_start = today.replace(day=1)
+        end = this_month_start - timedelta(days=1)
+        start = end.replace(day=1)
+        return start, end
+    if range_key == "this_year":
+        start = date(today.year, 1, 1)
+        return start, today
+    if range_key == "last_year":
+        start = date(today.year - 1, 1, 1)
+        end = date(today.year - 1, 12, 31)
+        return start, end
+    return None, None
+
+
+def _current_meter_totals_from_states():
+    with state_lock:
+        return {
+            "comp_hours": _to_int(states.get("sensor.comp_hours", {}).get("state")),
+            "vv_hours": _to_int(states.get("sensor.vv_hours", {}).get("state")),
+            "heating_hours": _to_int(states.get("sensor.heating_hours", {}).get("state")),
+            "em23_energy": _to_energy(states.get("sensor.em23_energy", {}).get("state")),
+        }
+
+
+def _compute_usage_delta(start_totals, end_totals):
+    keys = ("comp_hours", "vv_hours", "heating_hours", "em23_energy")
+    delta = {}
+    reset_detected = False
+    for key in keys:
+        start_val = start_totals.get(key) if start_totals else None
+        end_val = end_totals.get(key) if end_totals else None
+        if start_val is None or end_val is None:
+            delta[key] = None
+            continue
+        diff = end_val - start_val
+        if diff < 0:
+            reset_detected = True
+            diff = max(end_val, 0.0)
+        if key == "em23_energy":
+            delta[key] = round(diff, 1)
+        else:
+            delta[key] = int(round(diff))
+
+    running_sum = 0.0
+    has_running_val = False
+    for key in ("comp_hours", "vv_hours", "heating_hours"):
+        if delta[key] is not None:
+            running_sum += delta[key]
+            has_running_val = True
+    delta["running_hours_total"] = int(round(running_sum)) if has_running_val else None
+    delta["reset_detected"] = reset_detected
+    return delta
+
+
+@app.route("/api/usage_summary")
+def api_usage_summary():
+    range_key = (request.args.get("range") or "today").strip().lower().replace(" ", "_")
+    allowed_ranges = {
+        "today",
+        "yesterday",
+        "this_week",
+        "last_week",
+        "this_month",
+        "last_month",
+        "this_year",
+        "last_year",
+    }
+    if range_key not in allowed_ranges:
+        return jsonify({
+            "error": f"Unsupported range '{range_key}'",
+            "allowed": sorted(allowed_ranges),
+        }), 400
+
+    today = datetime.now().date()
+    start_date, end_date = _range_bounds(range_key, today)
+    snapshots = _load_daily_usage_snapshots()
+    sorted_dates = _sorted_snapshot_dates(snapshots)
+
+    if end_date == today:
+        end_source_date, end_totals = today, _current_meter_totals_from_states()
+    else:
+        end_source_date, end_totals = _latest_snapshot_on_or_before(snapshots, sorted_dates, end_date)
+
+    start_source_date, start_totals = _latest_snapshot_before(snapshots, sorted_dates, start_date)
+
+    # Fallback: if no snapshot before period start, use first snapshot of start day
+    # so in-progress ranges (today/this week/month/year) remain meaningful.
+    if start_totals is None:
+        first_start_totals = _first_snapshot_for_date(snapshots, start_date)
+        if first_start_totals is not None:
+            start_source_date, start_totals = start_date, first_start_totals
+
+    # Fallback for partial history: use earliest available snapshot inside period.
+    # This avoids returning '-' for ranges like this_week/this_month/this_year when
+    # only recent days exist in the snapshot file.
+    if start_totals is None:
+        first_in_range_date, first_in_range_totals = _earliest_snapshot_in_range(
+            snapshots,
+            sorted_dates,
+            start_date,
+            end_date,
+        )
+        if first_in_range_totals is not None:
+            start_source_date, start_totals = first_in_range_date, first_in_range_totals
+
+    delta = _compute_usage_delta(start_totals, end_totals)
+
+    return jsonify({
+        "range": range_key,
+        "period": {
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "start_source_date": start_source_date.isoformat() if start_source_date else None,
+            "end_source_date": end_source_date.isoformat() if end_source_date else None,
+        },
+        "summary": delta,
+    })
 
 
 @app.route("/api/open_request", methods=["GET"])

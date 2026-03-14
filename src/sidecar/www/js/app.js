@@ -1,7 +1,7 @@
 import "../dvi-card/dvi-heatpump-card.js";
 import "../dvi-card/dvi/heat_curve_card.js";
 import "../dvi-card/dvi/history_card.js";
-import "./usage_summary_card.js";
+import "./usage_summary_card.js?v=20260314-usage-presets-v3";
 import { HassAdapter } from "../hass-adapter.js";
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -87,21 +87,21 @@ window.addEventListener("DOMContentLoaded", async () => {
     ensureUsageChip(card, hass);
   }, 2000);
 
-  const closeOpenSession = () => {
-    try {
-      const payload = new Blob([], { type: "application/json" });
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon("/api/open_request/close", payload);
-        return;
-      }
-    } catch (e) {
-      return;
-    }
-    fetch("/api/open_request/close", { method: "POST", keepalive: true });
-  };
-
   window.addEventListener("beforeunload", closeOpenSession);
 });
+
+function closeOpenSession() {
+  try {
+    const payload = new Blob([], { type: "application/json" });
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon("/api/open_request/close", payload);
+      return;
+    }
+  } catch (e) {
+    return;
+  }
+  fetch("/api/open_request/close", { method: "POST", keepalive: true });
+}
 
 function ensureUsageChip(card, hass) {
   const shadowRoot = card?.shadowRoot;
@@ -125,7 +125,7 @@ function ensureUsageChip(card, hass) {
       title: "Forbrugsoversigt",
       content: {
         type: "custom:usage-summary-card",
-        default_range: "today"
+        default_preset: "today"
       }
     });
   };
@@ -227,7 +227,7 @@ function overrideTempSensorClicks(card, hass) {
         const friendlyName = entityState?.attributes?.friendly_name || mapping.entityId;
 
         hass.popupCallback({
-          title: `${friendlyName} - 24 timers historik`,
+          title: `${friendlyName} - historik`,
           content: {
             type: "custom:history-card",
             sensor: mapping.historyKey,
@@ -247,7 +247,7 @@ function overrideTempSensorClicks(card, hass) {
         e.stopPropagation();
 
         hass.popupCallback({
-          title: "Afrimning - 24 timers historik",
+          title: "Afrimning - historik",
           content: {
             type: "custom:history-card",
             sensor: "defrost",
@@ -267,7 +267,7 @@ function overrideTempSensorClicks(card, hass) {
           e.stopPropagation();
 
           hass.popupCallback({
-            title: "El-patron - 24 timers historik",
+            title: "El-patron - historik",
             content: {
               type: "custom:history-card",
               sensor: "aux_heating",
@@ -365,7 +365,9 @@ function setupPopupHandler(hass) {
 
       const usageCard = document.createElement("usage-summary-card");
       usageCard.setConfig({
-        default_range: content.default_range || "today"
+        default_preset: content.default_preset || content.default_range || "today",
+        start_date: content.start_date,
+        end_date: content.end_date
       });
       usageCard.hass = hass;
 

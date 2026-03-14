@@ -525,7 +525,7 @@ def api_device_info():
 
 @app.route("/api/history/<sensor_name>")
 def api_history(sensor_name):
-    """Serve 24-hour history for a specific sensor"""
+    """Serve history for a specific sensor filtered to a selected local date."""
     try:
         # Map entity keys to friendly names used in sensor_history.json
         entity_to_friendly = {
@@ -545,6 +545,23 @@ def api_history(sensor_name):
         
         # Convert entity key to friendly name for lookup
         lookup_name = entity_to_friendly.get(sensor_name, sensor_name)
+
+        requested_date_raw = (request.args.get("date") or "").strip()
+        today = datetime.now().date()
+        if requested_date_raw:
+            requested_date = _parse_iso_date(requested_date_raw)
+            if requested_date is None:
+                return jsonify({"error": "Invalid date format. Expected YYYY-MM-DD"}), 400
+        else:
+            requested_date = today
+
+        earliest_date = today - timedelta(days=29)
+        if requested_date < earliest_date or requested_date > today:
+            return jsonify({
+                "error": "Date must be within the last 30 days",
+                "min_date": earliest_date.isoformat(),
+                "max_date": today.isoformat(),
+            }), 400
         
         history_path = "./../sensor_history.json"
         if not os.path.exists(history_path):
@@ -555,10 +572,26 @@ def api_history(sensor_name):
         
         if lookup_name not in history:
             return jsonify({"error": f"Sensor {lookup_name} not found", "available": list(history.keys())}), 404
+
+        selected_data = [
+            point for point in history[lookup_name]
+            if datetime.fromtimestamp(point.get("timestamp", 0)).date() == requested_date
+        ]
+
+        start_dt = datetime.combine(requested_date, datetime.min.time())
+        if requested_date == today:
+            end_ts = time.time()
+        else:
+            end_ts = (start_dt + timedelta(days=1)).timestamp()
         
         return jsonify({
             "sensor": sensor_name,
-            "data": history[lookup_name]
+            "date": requested_date.isoformat(),
+            "period": {
+                "start_timestamp": start_dt.timestamp(),
+                "end_timestamp": end_ts,
+            },
+            "data": selected_data,
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -709,6 +742,52 @@ def _range_bounds(range_key, today):
     return None, None
 
 
+def _parse_iso_date(value):
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _resolve_usage_period(args):
+    start_value = (args.get("start") or "").strip()
+    end_value = (args.get("end") or "").strip()
+    if start_value or end_value:
+        if not start_value or not end_value:
+            return None, None, "Both 'start' and 'end' must be provided together"
+
+        start_date = _parse_iso_date(start_value)
+        end_date = _parse_iso_date(end_value)
+        if start_date is None or end_date is None:
+            return None, None, "Invalid date format. Expected YYYY-MM-DD"
+        if start_date > end_date:
+            return None, None, "'start' must be on or before 'end'"
+        return start_date, end_date, None
+
+    preset = (args.get("preset") or args.get("range") or "today").strip().lower().replace(" ", "_")
+    allowed_presets = {
+        "today",
+        "yesterday",
+        "this_week",
+        "last_week",
+        "this_month",
+        "last_month",
+        "this_year",
+        "last_year",
+    }
+    if preset not in allowed_presets:
+        return None, None, {
+            "error": f"Unsupported preset '{preset}'",
+            "allowed": sorted(allowed_presets),
+        }
+
+    today = datetime.now().date()
+    start_date, end_date = _range_bounds(preset, today)
+    return start_date, end_date, None
+
+
 def _current_meter_totals_from_states():
     with state_lock:
         return {
@@ -743,27 +822,15 @@ def _compute_usage_delta(start_totals, end_totals):
 
 @app.route("/api/usage_summary")
 def api_usage_summary():
-    range_key = (request.args.get("range") or "today").strip().lower().replace(" ", "_")
-    allowed_ranges = {
-        "today",
-        "yesterday",
-        "this_week",
-        "last_week",
-        "this_month",
-        "last_month",
-        "this_year",
-        "last_year",
-    }
-    if range_key not in allowed_ranges:
-        return jsonify({
-            "error": f"Unsupported range '{range_key}'",
-            "allowed": sorted(allowed_ranges),
-        }), 400
+    start_date, end_date, error = _resolve_usage_period(request.args)
+    if isinstance(error, dict):
+        return jsonify(error), 400
+    if error:
+        return jsonify({"error": error}), 400
 
-    today = datetime.now().date()
-    start_date, end_date = _range_bounds(range_key, today)
     snapshots = _load_daily_usage_snapshots()
     sorted_dates = _sorted_snapshot_dates(snapshots)
+    today = datetime.now().date()
 
     if end_date == today:
         end_source_date, end_totals = today, _current_meter_totals_from_states()
@@ -795,7 +862,8 @@ def api_usage_summary():
     delta = _compute_usage_delta(start_totals, end_totals)
 
     return jsonify({
-        "range": range_key,
+        "range": request.args.get("range"),
+        "preset": (request.args.get("preset") or request.args.get("range") or None),
         "period": {
             "start_date": start_date.isoformat(),
             "end_date": end_date.isoformat(),

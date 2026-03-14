@@ -34,7 +34,9 @@ STATIC_VALUES_SCRIPT = os.path.join(SCRIPT_DIR, "read_static_values_modbustk.py"
 
 # History tracking
 HISTORY_FILE = os.path.join(SCRIPT_DIR, "sensor_history.json")
-HISTORY_MAX_AGE = 86400  # 24 hours in seconds
+HISTORY_MAX_AGE = 30 * 86400  # 30 days in seconds
+HISTORY_HIGH_RES_AGE = 48 * 3600  # Keep full 15-second samples for 48 hours
+HISTORY_DOWNSAMPLED_INTERVAL = 60  # Older data is compacted to 60-second buckets
 HISTORY_SAMPLE_INTERVAL = 15  # Sample every 15 seconds
 USAGE_DAILY_FILE = os.path.join(SCRIPT_DIR, "meter_usage_daily.json")
 USAGE_DAILY_RETENTION_DAYS = 400
@@ -660,13 +662,30 @@ def load_history():
             pass
     return {}
 
-def prune_old_data(history, cutoff_time):
-    """Remove data points older than 24 hours"""
+def _compact_sensor_history(points, cutoff_time, high_res_cutoff):
+    filtered_points = []
+    compacted_buckets = {}
+
+    for point in sorted(points, key=lambda item: item.get("timestamp", 0)):
+        timestamp = point.get("timestamp")
+        if timestamp is None or timestamp <= cutoff_time:
+            continue
+
+        if timestamp > high_res_cutoff:
+            filtered_points.append(point)
+            continue
+
+        bucket = int(timestamp // HISTORY_DOWNSAMPLED_INTERVAL)
+        compacted_buckets[bucket] = point
+
+    older_points = [compacted_buckets[key] for key in sorted(compacted_buckets.keys())]
+    return older_points + filtered_points
+
+
+def prune_old_data(history, cutoff_time, high_res_cutoff):
+    """Remove expired points and compact older retained history to 60-second buckets."""
     for sensor in history:
-        history[sensor] = [
-            point for point in history[sensor]
-            if point["timestamp"] > cutoff_time
-        ]
+        history[sensor] = _compact_sensor_history(history[sensor], cutoff_time, high_res_cutoff)
     return history
 
 def save_history_sample(sensors_dict):
@@ -674,6 +693,7 @@ def save_history_sample(sensors_dict):
     history = load_history()
     current_time = time.time()
     cutoff_time = current_time - HISTORY_MAX_AGE
+    high_res_cutoff = current_time - HISTORY_HIGH_RES_AGE
     
     # Add new samples (only VV temp for now)
     for sensor_name, value in sensors_dict.items():
@@ -685,7 +705,7 @@ def save_history_sample(sensors_dict):
         })
     
     # Prune old data
-    history = prune_old_data(history, cutoff_time)
+    history = prune_old_data(history, cutoff_time, high_res_cutoff)
     
     # Atomic write
     history_dir = os.path.dirname(os.path.abspath(HISTORY_FILE))
@@ -1479,7 +1499,7 @@ while True:
 
         last_misc_update = now
 
-    # Sample sensor history every 60 seconds (all temperature sensors)
+    # Sample sensor history every 15 seconds; older data is compacted after 48 hours.
     if now - last_history_sample >= HISTORY_SAMPLE_INTERVAL:
         # Build history sensors dict based on available sensors
         history_sensors = {}

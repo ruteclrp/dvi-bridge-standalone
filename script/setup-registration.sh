@@ -18,6 +18,61 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+RUNTIME_ROOT="/home/dviha/dvi-bridge"
+RUNTIME_CURRENT="$RUNTIME_ROOT/current"
+
+find_dir_with_files() {
+    local dir
+    for dir in "$@"; do
+        [ -n "$dir" ] || continue
+        [ -d "$dir" ] || continue
+
+        case "$dir" in
+            *systemd)
+                [ -f "$dir/dvi-tunnel.service" ] || continue
+                [ -f "$dir/device-channel.service" ] || continue
+                [ -f "$dir/dvi-tunnels-ready.service" ] || continue
+                [ -f "$dir/dvi-heartbeat.service" ] || continue
+                [ -f "$dir/dvi-heartbeat.timer" ] || continue
+                [ -f "$dir/dvi-tunnel-watchdog.service" ] || continue
+                [ -f "$dir/dvi-tunnel-watchdog.timer" ] || continue
+                ;;
+            *sidecar)
+                [ -f "$dir/.env" ] || [ -f "$dir/.env.example" ] || continue
+                ;;
+        esac
+
+        echo "$dir"
+        return 0
+    done
+
+    return 1
+}
+
+REPO_SIDECAR_DIR="$(find_dir_with_files \
+    "$RUNTIME_CURRENT/sidecar" \
+    "$RUNTIME_ROOT/sidecar" \
+    "$PROJECT_ROOT/src/sidecar" \
+    "$PROJECT_ROOT/sidecar")" || REPO_SIDECAR_DIR=""
+
+REPO_SYSTEMD_DIR="$(find_dir_with_files \
+    "$RUNTIME_CURRENT/systemd" \
+    "$RUNTIME_ROOT/systemd" \
+    "$PROJECT_ROOT/src/systemd" \
+    "$PROJECT_ROOT/systemd")" || REPO_SYSTEMD_DIR=""
+
+if [ -f "$RUNTIME_CURRENT/requirements.txt" ]; then
+    REPO_REQUIREMENTS_FILE="$RUNTIME_CURRENT/requirements.txt"
+elif [ -f "$RUNTIME_ROOT/requirements.txt" ]; then
+    REPO_REQUIREMENTS_FILE="$RUNTIME_ROOT/requirements.txt"
+elif [ -f "$PROJECT_ROOT/src/bridge/requirements.txt" ]; then
+    REPO_REQUIREMENTS_FILE="$PROJECT_ROOT/src/bridge/requirements.txt"
+elif [ -f "$PROJECT_ROOT/requirements.txt" ]; then
+    REPO_REQUIREMENTS_FILE="$PROJECT_ROOT/requirements.txt"
+else
+    REPO_REQUIREMENTS_FILE=""
+fi
+
 echo ""
 echo "[1/6] Installing cloudflared..."
 if ! command -v cloudflared &> /dev/null; then
@@ -43,28 +98,26 @@ fi
 echo ""
 echo "[2/6] Installing Python dependencies..."
 PIP_CMD=""
-if [ -x "/home/dviha/dvi-bridge/venv/bin/pip" ]; then
-    PIP_CMD="/home/dviha/dvi-bridge/venv/bin/pip"
-elif [ -x "$PROJECT_ROOT/dvi-bridge/.venv/bin/pip" ]; then
-    PIP_CMD="$PROJECT_ROOT/dvi-bridge/.venv/bin/pip"
+if [ -x "$RUNTIME_ROOT/venv/bin/pip" ]; then
+    PIP_CMD="$RUNTIME_ROOT/venv/bin/pip"
+elif [ -x "$PROJECT_ROOT/.venv/bin/pip" ]; then
+    PIP_CMD="$PROJECT_ROOT/.venv/bin/pip"
 elif command -v pip3 &> /dev/null; then
     PIP_CMD="pip3"
 fi
 
 REQ_FILE=""
-if [ -f "/home/dviha/dvi-bridge/requirements.txt" ]; then
-    REQ_FILE="/home/dviha/dvi-bridge/requirements.txt"
-elif [ -f "$PROJECT_ROOT/dvi-bridge/requirements.txt" ]; then
-    REQ_FILE="$PROJECT_ROOT/dvi-bridge/requirements.txt"
+if [ -n "$REPO_REQUIREMENTS_FILE" ]; then
+    REQ_FILE="$REPO_REQUIREMENTS_FILE"
 fi
 
 if [ -z "$REQ_FILE" ]; then
-    echo "  ✗ requirements.txt not found. Expected /home/dviha/dvi-bridge/requirements.txt"
+    echo "  ✗ requirements.txt not found. Expected $RUNTIME_CURRENT/requirements.txt, $RUNTIME_ROOT/requirements.txt, or $PROJECT_ROOT/src/bridge/requirements.txt"
     exit 1
 fi
 
 if [ -z "$PIP_CMD" ]; then
-    echo "  ✗ pip not found. Install python3-pip or create a venv at $PROJECT_ROOT/dvi-bridge/.venv"
+    echo "  ✗ pip not found. Install python3-pip or create a venv at $PROJECT_ROOT/.venv"
     exit 1
 fi
 
@@ -79,14 +132,14 @@ echo "  ✓ Directories created"
 echo ""
 echo "[4/6] Setting up environment configuration..."
 if [ ! -f /etc/dvi-bridge/.env ]; then
-    if [ -f "/home/dviha/dvi-bridge/.env" ]; then
-        cp "/home/dviha/dvi-bridge/.env" /etc/dvi-bridge/.env
-        echo "  ✓ Using existing .env file from /home/dviha/dvi-bridge/.env"
-    elif [ -f "$PROJECT_ROOT/dvi-bridge/sidecar/.env" ]; then
-        cp "$PROJECT_ROOT/dvi-bridge/sidecar/.env" /etc/dvi-bridge/.env
+    if [ -f "$RUNTIME_ROOT/.env" ]; then
+        cp "$RUNTIME_ROOT/.env" /etc/dvi-bridge/.env
+        echo "  ✓ Using existing .env file from $RUNTIME_ROOT/.env"
+    elif [ -n "$REPO_SIDECAR_DIR" ] && [ -f "$REPO_SIDECAR_DIR/.env" ]; then
+        cp "$REPO_SIDECAR_DIR/.env" /etc/dvi-bridge/.env
         echo "  ✓ Using existing .env file"
-    elif [ -f "$PROJECT_ROOT/dvi-bridge/sidecar/.env.example" ]; then
-        cp "$PROJECT_ROOT/dvi-bridge/sidecar/.env.example" /etc/dvi-bridge/.env
+    elif [ -n "$REPO_SIDECAR_DIR" ] && [ -f "$REPO_SIDECAR_DIR/.env.example" ]; then
+        cp "$REPO_SIDECAR_DIR/.env.example" /etc/dvi-bridge/.env
         echo "  ⚠️  Created .env from example - UPDATE MAKER_BACKEND_URL!"
         echo ""
         echo "  Edit /etc/dvi-bridge/.env and set:"
@@ -101,7 +154,11 @@ fi
 
 echo ""
 echo "[5/6] Installing systemd units..."
-SYSTEMD_SRC="$PROJECT_ROOT/dvi-bridge/systemd"
+SYSTEMD_SRC="$REPO_SYSTEMD_DIR"
+if [ -z "$SYSTEMD_SRC" ]; then
+    echo "  ✗ systemd unit directory not found. Expected $RUNTIME_CURRENT/systemd, $RUNTIME_ROOT/systemd, $PROJECT_ROOT/src/systemd, or $PROJECT_ROOT/systemd"
+    exit 1
+fi
 cp "$SYSTEMD_SRC/dvi-tunnel.service" /etc/systemd/system/
 cp "$SYSTEMD_SRC/device-channel.service" /etc/systemd/system/
 cp "$SYSTEMD_SRC/dvi-tunnels-ready.service" /etc/systemd/system/

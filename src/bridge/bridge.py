@@ -171,6 +171,7 @@ def _refresh_static_values() -> None:
         print(f"⚠️ Failed to run read_static_values_modbustk.py: {e}")
 
 STATE_PATH = "./state.json"
+STATE_FILE_MODE = 0o644
 
 def write_state_atomic(state: dict) -> None:
     """
@@ -192,8 +193,11 @@ def write_state_atomic(state: dict) -> None:
         os.fsync(tmp.fileno())
         temp_name = tmp.name
 
+    os.chmod(temp_name, STATE_FILE_MODE)
+
     # Atomic replace on POSIX
     os.replace(temp_name, STATE_PATH)
+    os.chmod(STATE_PATH, STATE_FILE_MODE)
 
 def _ensure_pump_id() -> Optional[str]:
     _refresh_static_values()

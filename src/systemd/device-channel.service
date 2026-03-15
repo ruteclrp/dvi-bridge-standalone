@@ -2,6 +2,7 @@
 Description=Device Channel Client (WebSocket bridge to backend)
 After=network-online.target dvi-tunnel.service
 Wants=network-online.target dvi-tunnel.service
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -10,7 +11,6 @@ WorkingDirectory=/home/dviha/dvi-bridge
 ExecStart=/home/dviha/dvi-bridge/venv/bin/python /home/dviha/dvi-bridge/sidecar/device_channel.py
 Restart=always
 RestartSec=5s
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target

@@ -152,7 +152,19 @@ jobs:
           # Copy sidecar Python files
           cp src/sidecar/webbridge.py release/sidecar-package/sidecar/
           cp src/sidecar/entity_map.py release/sidecar-package/sidecar/
-          cp src/sidecar/requirements.txt release/sidecar-package/sidecar/
+          cp src/sidecar/registration.py release/sidecar-package/sidecar/
+          cp src/sidecar/device_channel.py release/sidecar-package/sidecar/
+          cp src/sidecar/heartbeat.py release/sidecar-package/sidecar/
+          cp src/sidecar/tunnel_watchdog.py release/sidecar-package/sidecar/
+          cp src/sidecar/wait_for_tunnels.py release/sidecar-package/sidecar/
+          cp src/sidecar/.env.example release/sidecar-package/sidecar/
+
+          cat > release/sidecar-package/sidecar/requirements.txt << 'EOF'
+          flask
+          python-dotenv
+          requests
+          websocket-client
+          EOF
 
           # Copy existing sidecar www content
           cp -r src/sidecar/www/* release/sidecar-package/sidecar/www/
@@ -161,9 +173,8 @@ jobs:
           cp src/dvi-card/dvi-heatpump-card.js release/sidecar-package/sidecar/www/dvi-card/
           cp -r src/dvi-card/dvi release/sidecar-package/sidecar/www/dvi-card/
 
-          # systemd service file for sidecar
-          mkdir -p release/sidecar-package/systemd
-          cp src/systemd/webbridge.service.example release/sidecar-package/systemd/
+          # systemd files for sidecar, registration, and tunnel support
+          cp -r src/systemd release/sidecar-package/
 
           # Version file
           echo "${{ steps.version.outputs.version }}" > release/sidecar-package/VERSION
@@ -179,7 +190,7 @@ jobs:
           1. Extract to /home/dviha/dvi-bridge/
           2. Install requirements from sidecar/requirements.txt
           3. Set up systemd service for webbridge
-          4. Access web interface at http://[rpi-ip]:5555
+          4. Access web interface at http://[rpi-ip]:5000
           
           See main repository for detailed instructions.
           EOF
@@ -205,6 +216,12 @@ jobs:
           mkdir -p release/complete-runtime/sidecar/www/dvi-card
           cp src/sidecar/webbridge.py release/complete-runtime/sidecar/
           cp src/sidecar/entity_map.py release/complete-runtime/sidecar/
+          cp src/sidecar/registration.py release/complete-runtime/sidecar/
+          cp src/sidecar/device_channel.py release/complete-runtime/sidecar/
+          cp src/sidecar/heartbeat.py release/complete-runtime/sidecar/
+          cp src/sidecar/tunnel_watchdog.py release/complete-runtime/sidecar/
+          cp src/sidecar/wait_for_tunnels.py release/complete-runtime/sidecar/
+          cp src/sidecar/.env.example release/complete-runtime/sidecar/
           cp -r src/sidecar/www/* release/complete-runtime/sidecar/www/
           cp src/dvi-card/dvi-heatpump-card.js release/complete-runtime/sidecar/www/dvi-card/
           cp -r src/dvi-card/dvi release/complete-runtime/sidecar/www/dvi-card/
@@ -215,7 +232,14 @@ jobs:
           # Merge requirements from both bridge and sidecar
           cat src/bridge/requirements.txt > release/complete-runtime/requirements.txt
           echo "" >> release/complete-runtime/requirements.txt
-          cat src/sidecar/requirements.txt >> release/complete-runtime/requirements.txt
+          cat >> release/complete-runtime/requirements.txt << 'EOF'
+          flask
+          python-dotenv
+          requests
+          websocket-client
+          EOF
+          awk 'NF && !seen[$0]++' release/complete-runtime/requirements.txt > release/complete-runtime/requirements.txt.tmp
+          mv release/complete-runtime/requirements.txt.tmp release/complete-runtime/requirements.txt
 
           # systemd service files
           cp -r src/systemd release/complete-runtime/
@@ -234,7 +258,9 @@ jobs:
           mkdir -p release/installation-scripts
           
           # Copy installation scripts
-          cp -r script/* release/installation-scripts/
+          cp script/install.sh release/installation-scripts/
+          cp script/update.sh release/installation-scripts/
+          cp script/setup-registration.sh release/installation-scripts/
           
           # Copy documentation
           cp README.md release/installation-scripts/
@@ -323,7 +349,7 @@ jobs:
             - **dvi-bridge-basic-${{ steps.version.outputs.version }}.rpi.tar.gz** - MQTT bridge only, minimal installation
             - **dvi-sidecar-${{ steps.version.outputs.version }}.rpi.tar.gz** - Web interface (requires bridge running separately)
             - **dvi-complete-runtime-${{ steps.version.outputs.version }}.rpi.tar.gz** - Everything included (bridge + sidecar)
-            - **dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz** - Installation scripts (install.sh and update.sh)
+            - **dvi-installation-scripts-${{ steps.version.outputs.version }}.rpi.tar.gz** - Installation scripts (install.sh, update.sh, setup-registration.sh)
             
             Click on a file, then click "Download" or view "Raw" to download.
             

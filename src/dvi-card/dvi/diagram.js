@@ -16,6 +16,7 @@ const CHIP_TITLES = {
 	cv: "Centralvarme",
 	vv: "Varmtvandstemperatur",
 	aux: "El-patron / AUX",
+	tailscale: "Tailscale",
 };
 
 const opacityFor = (state) => (state === "on" ? 1 : 0.25);
@@ -110,6 +111,9 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const vvSchedule = config.vv_schedule ? getState(config.vv_schedule) : null;
 	const auxHeating = config.aux_heating ? getState(config.aux_heating) : null;
 	const heatpumpState = config.heatpump_state ? getState(config.heatpump_state) : null;
+	const openRequestEntity = config.open_request_entity ? hass.states[config.open_request_entity] : null;
+	const openRequestState = openRequestEntity ? openRequestEntity.state : null;
+	const openRequestStatus = openRequestEntity?.attributes?.status || null;
 
 	// heating element sensor used when aux select = "Automatic"
 	const heatingElementState = getStateByName("Heating element");
@@ -201,6 +205,10 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const auxActive = isModeActive(auxHeating);
 	const heatpumpActive = heatpumpState && heatpumpState.toLowerCase() === "on";
 	const heatpumpStandby = heatpumpState && heatpumpState.toLowerCase() === "stand by";
+	const openRequestPending = openRequestStatus === "pending";
+	const openRequestConfirmed = openRequestStatus === "confirmed";
+	const openRequestFallback = !openRequestStatus && openRequestState && openRequestState.toLowerCase() === "on";
+	const openRequestActive = openRequestPending || openRequestConfirmed || openRequestFallback;
 
 	const cvIconColor = cvActive
 			? "var(--state-climate-heat-color, var(--accent-color))"
@@ -223,6 +231,7 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const vvEntities = Array.isArray(config.vv_entities) ? config.vv_entities : [];
 	const auxEntities = Array.isArray(config.aux_entities) ? config.aux_entities : [];
 	const heatpumpEntities = config.heatpump_state ? [config.heatpump_state] : [];
+	const tailscaleEntities = config.tailscale_entity ? [config.tailscale_entity] : [];
 
 	const iconEntityMap = {
 		defrost: config.defrost_icon,
@@ -234,11 +243,29 @@ export function buildDiagramView({ hass, config, imageBase, pumpType }) {
 	const cvNightIcon = cvNight ? CV_NIGHT_ICONS[cvNight] ?? null : null;
 	const vvScheduleIcon = vvSchedule ? VV_SCHEDULE_ICONS[vvSchedule] ?? null : null;
 
+	const tailscaleState = config.tailscale_entity ? getState(config.tailscale_entity) : null;
+	const tailscaleActive = tailscaleState && (tailscaleState.toLowerCase() === "on" || tailscaleState.toLowerCase() === "connected");
+	const tailscaleIconColor = tailscaleActive
+			? "var(--success-color, #4caf50)"
+			: "var(--error-color, #f44336)";
+
 	const infoChipClasses = "mode-chip popup-chip mode-chip--info mode-chip--active";
 	const cvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(cvActive)}`;
 	const vvChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(vvActive)}`;
 	const auxChipClasses = `mode-chip popup-chip ${heatpumpStandby ? "mode-chip--inactive" : chipStateClass(auxActive)}`;
 	const heatpumpChipClasses = `mode-chip popup-chip ${chipStateClass(heatpumpActive)}`;
+	const tailscaleChipClasses = `mode-chip popup-chip ${chipStateClass(tailscaleActive)}`;
+	const openRequestChipHtml = openRequestActive
+		? openRequestPending || openRequestFallback
+			? `<div class="mode-chip mode-chip--open-request mode-chip--open-request-active clickable" data-open-confirm="true">
+				 <ha-icon icon="mdi:lock"></ha-icon>
+				 <span class="chip-label">Open request</span>
+			 </div>`
+			: `<div class="mode-chip mode-chip--open-confirm mode-chip--open-confirm-active clickable" data-open-close="true">
+				 <ha-icon icon="mdi:lock-open-variant"></ha-icon>
+				 <span class="chip-label">Open</span>
+			 </div>`
+		: "";
 
 	const heatCurveChipHtml = `
 ${
@@ -258,6 +285,7 @@ ${
 
 	// Build mode chips HTML (to be rendered in the mode-chips-bar)
 	const chipsHtml = `
+	${openRequestChipHtml}
       ${
 				infoEntities.length
 					? `<div class="${infoChipClasses}" data-popup="info">
@@ -304,7 +332,14 @@ ${
               </div>`
 					: ""
 			}
-      
+      ${
+					tailscaleEntities.length
+					? `<div class="${tailscaleChipClasses}" data-popup="tailscale">
+               <ha-icon icon="mdi:lan${tailscaleActive ? '-connect' : '-disconnect'}" style="color:${tailscaleIconColor};"></ha-icon>
+               <span class="chip-label">VPN</span>
+             </div>`
+					: ""
+			}      
       ${heatCurveChipHtml}
   `;
 
@@ -435,6 +470,7 @@ ${
 			cv: { title: CHIP_TITLES.cv, entities: cvEntities },
 			vv: { title: CHIP_TITLES.vv, entities: vvEntities },
 			aux: { title: CHIP_TITLES.aux, entities: auxEntities },
+			tailscale: { title: CHIP_TITLES.tailscale, entities: tailscaleEntities },
 		},
 	};
 }

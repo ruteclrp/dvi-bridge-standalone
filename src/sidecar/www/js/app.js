@@ -1,6 +1,7 @@
 import "../dvi-card/dvi-heatpump-card.js";
 import "../dvi-card/dvi/heat_curve_card.js";
 import "../dvi-card/dvi/history_card.js";
+import "./usage_summary_card.js?v=20260314-usage-presets-v3";
 import { HassAdapter } from "../hass-adapter.js";
 
 window.addEventListener("DOMContentLoaded", async () => {
@@ -32,6 +33,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     comp_icon: "binary_sensor.soft_starter_compressor",
     cv_pump_icon: "binary_sensor.circ_pump_cv",
     defrost_icon: "binary_sensor.four_way_valve_defrost",
+    sumalarm: "binary_sensor.sum_alarm_failure",
+    open_request_entity: "binary_sensor.open_request",
     cv_curve_number: "number.cv_curve",
     curve_set_minus12_number: "number.curve_set_minus12",
     curve_set_plus12_number: "number.curve_set_plus12",
@@ -52,8 +55,24 @@ window.addEventListener("DOMContentLoaded", async () => {
   card.hass = hass;
   document.body.appendChild(card);
 
+  const isIpad = () =>
+    /iPad/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const updateIpadLayout = () => {
+    const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+    if (isIpad() && isLandscape) {
+      card.classList.add("ipad-landscape");
+    } else {
+      card.classList.remove("ipad-landscape");
+    }
+  };
+  updateIpadLayout();
+  window.addEventListener("resize", updateIpadLayout);
+  window.addEventListener("orientationchange", updateIpadLayout);
+
   setupPopupHandler(hass);
   overrideTempSensorClicks(card, hass);
+  ensureUsageChip(card, hass);
 
   const chartInterval = setInterval(() => {
     if (window.Chart && !window.Chart._darkModePatched) {
@@ -65,8 +84,59 @@ window.addEventListener("DOMContentLoaded", async () => {
   setInterval(async () => {
     await hass.refresh();
     card.hass = hass;
+    ensureUsageChip(card, hass);
   }, 2000);
+
+  window.addEventListener("beforeunload", closeOpenSession);
 });
+
+function closeOpenSession() {
+  try {
+    const payload = new Blob([], { type: "application/json" });
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon("/api/open_request/close", payload);
+      return;
+    }
+  } catch (e) {
+    return;
+  }
+  fetch("/api/open_request/close", { method: "POST", keepalive: true });
+}
+
+function ensureUsageChip(card, hass) {
+  const shadowRoot = card?.shadowRoot;
+  if (!shadowRoot) return;
+
+  const modeBar = shadowRoot.getElementById("mode-chips-bar");
+  if (!modeBar) return;
+
+  if (modeBar.querySelector("[data-sidecar-usage-trigger]")) return;
+
+  const usageChip = document.createElement("div");
+  usageChip.className = "mode-chip mode-chip--info mode-chip--active clickable";
+  usageChip.setAttribute("data-sidecar-usage-trigger", "true");
+  usageChip.innerHTML = `
+    <ha-icon icon="mdi:chart-box-outline"></ha-icon>
+    <span class="chip-label">Forbrug</span>
+  `;
+
+  usageChip.onclick = () => {
+    hass.popupCallback({
+      title: "Forbrugsoversigt",
+      content: {
+        type: "custom:usage-summary-card",
+        default_preset: "today"
+      }
+    });
+  };
+
+  const infoChip = modeBar.querySelector('[data-popup="info"]');
+  if (infoChip?.nextSibling) {
+    modeBar.insertBefore(usageChip, infoChip.nextSibling);
+  } else {
+    modeBar.appendChild(usageChip);
+  }
+}
 
 function applyChartDarkMode() {
   if (!window.Chart || window.Chart._darkModePatched) return;
@@ -107,17 +177,13 @@ function applyChartDarkMode() {
   Object.setPrototypeOf(window.Chart, OriginalChart);
   Object.assign(window.Chart, OriginalChart);
   window.Chart._darkModePatched = true;
-  console.log("✅ Chart.js dark mode applied");
 }
 
 function overrideTempSensorClicks(card, hass) {
-  console.log("🔧 overrideTempSensorClicks called");
   const shadowRoot = card.shadowRoot;
   if (!shadowRoot) {
-    console.log("❌ No shadowRoot found");
     return;
   }
-  console.log("✅ shadowRoot found");
 
   const keyToEntityMap = {
     outdoor: { entityId: "sensor.outdoor_temp", historyKey: "outdoor_temp" },
@@ -135,35 +201,21 @@ function overrideTempSensorClicks(card, hass) {
   function overrideHandlers() {
     const diagram = shadowRoot.querySelector(".diagram");
     if (!diagram) {
-      console.log("⏳ Diagram not yet ready");
       return;
     }
 
-    const allLabels = diagram.querySelectorAll(".diagram-label");
     const clickableLabels = diagram.querySelectorAll(".diagram-label.clickable");
-    console.log(`🔍 Found ${allLabels.length} total labels, ${clickableLabels.length} clickable`);
 
     let overriddenCount = 0;
     clickableLabels.forEach(label => {
       const dataKey = label.getAttribute("data-key");
-      console.log(`  - Label with data-key: ${dataKey}, clickable: ${label.classList.contains("clickable")}`);
 
       const mapping = keyToEntityMap[dataKey];
       if (!dataKey || !mapping) {
-        console.log("    ⏭️ Skipping (not in temperature sensor list)");
         return;
       }
-      if (label._historyOverridden) {
-        console.log("    ⏭️ Already overridden");
-        return;
-      }
-      label._historyOverridden = true;
-
-      const oldHandler = label.onclick;
-      console.log(`    📝 Old handler: ${oldHandler ? "exists" : "null"}`);
 
       label.onclick = e => {
-        console.log(`🖱️ Click detected on ${dataKey}!`);
         e.preventDefault();
         e.stopPropagation();
 
@@ -171,7 +223,7 @@ function overrideTempSensorClicks(card, hass) {
         const friendlyName = entityState?.attributes?.friendly_name || mapping.entityId;
 
         hass.popupCallback({
-          title: `${friendlyName} - 24 timers historik`,
+          title: `${friendlyName} - historik`,
           content: {
             type: "custom:history-card",
             sensor: mapping.historyKey,
@@ -179,26 +231,18 @@ function overrideTempSensorClicks(card, hass) {
           }
         });
       };
-
-      console.log(`    ✅ Override installed for ${dataKey}`);
       overriddenCount++;
     });
 
-    if (overriddenCount > 0) {
-      console.log(`✅ Overrode ${overriddenCount} temperature sensor click handlers`);
-    }
-
     const defrostIcon = diagram.querySelector('[data-icon-key="defrost"]');
-    if (defrostIcon && !defrostIcon._defrostOverridden) {
-      defrostIcon._defrostOverridden = true;
+    if (defrostIcon) {
       defrostIcon.classList.add("clickable");
       defrostIcon.onclick = e => {
-        console.log("🖱️ Click detected on defrost icon!");
         e.preventDefault();
         e.stopPropagation();
 
         hass.popupCallback({
-          title: "Afrimning - 24 timers historik",
+          title: "Afrimning - historik",
           content: {
             type: "custom:history-card",
             sensor: "defrost",
@@ -206,21 +250,18 @@ function overrideTempSensorClicks(card, hass) {
           }
         });
       };
-      console.log("✅ Defrost icon click handler installed");
     }
 
     const auxIcons = diagram.querySelectorAll('[data-icon-key="aux"]');
     auxIcons.forEach(auxIcon => {
-      if (auxIcon && !auxIcon._auxOverridden) {
-        auxIcon._auxOverridden = true;
+      if (auxIcon) {
         auxIcon.classList.add("clickable");
         auxIcon.onclick = e => {
-          console.log("🖱️ Click detected on aux icon!");
           e.preventDefault();
           e.stopPropagation();
 
           hass.popupCallback({
-            title: "El-patron - 24 timers historik",
+            title: "El-patron - historik",
             content: {
               type: "custom:history-card",
               sensor: "aux_heating",
@@ -228,13 +269,11 @@ function overrideTempSensorClicks(card, hass) {
             }
           });
         };
-        console.log("✅ Aux icon click handler installed");
       }
     });
   }
 
-  const observer = new MutationObserver(mutations => {
-    console.log(`🔄 MutationObserver triggered (${mutations.length} mutations)`);
+  const observer = new MutationObserver(() => {
     overrideHandlers();
   });
 
@@ -243,7 +282,6 @@ function overrideTempSensorClicks(card, hass) {
     subtree: true
   });
 
-  console.log("👀 MutationObserver installed");
   overrideHandlers();
 }
 
@@ -309,9 +347,33 @@ function setupPopupHandler(hass) {
         if (modalContent) {
           modalContent.style.setProperty('max-width', '90vw', 'important');
           modalContent.style.setProperty('width', 'fit-content', 'important');
-          console.log('Modal content styles set:', modalContent.style.maxWidth, modalContent.style.width);
         }
       })();
+
+      modal.classList.add("active");
+      return;
+    }
+
+    if (content && content.type === "custom:usage-summary-card") {
+      modalTitle.textContent = title || "Forbrugsoversigt";
+
+      const usageCard = document.createElement("usage-summary-card");
+      usageCard.setConfig({
+        default_preset: content.default_preset || content.default_range || "today",
+        start_date: content.start_date,
+        end_date: content.end_date
+      });
+      usageCard.hass = hass;
+
+      modalBody.innerHTML = "";
+      modalBody.appendChild(usageCard);
+
+      const modalContent = document.querySelector('.modal-content');
+      if (modalContent) {
+        modalContent.style.width = 'min(560px, 95vw)';
+        modalContent.style.minWidth = 'unset';
+        modalContent.style.maxWidth = '95vw';
+      }
 
       modal.classList.add("active");
       return;

@@ -1,9 +1,14 @@
 class HistoryCard extends HTMLElement {
   constructor() {
     super();
-    this._timeSpan = 24; // Default to 24 hours
-    this._fullData = null; // Store full dataset
-    this._chart = null; // Store chart instance
+    this._selectedPreset = "today";
+    this._selectedDate = this.todayLocalIso();
+    this._fromHour = 0;
+    this._toHour = 24;
+    this._fullData = null;
+    this._defrostData = null;
+    this._period = null;
+    this._chart = null;
   }
   
   connectedCallback() {
@@ -47,9 +52,96 @@ class HistoryCard extends HTMLElement {
       return `${secs}s`;
     }
   }
+
+  toIsoLocalDate(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  todayLocalIso() {
+    return this.toIsoLocalDate(new Date());
+  }
+
+  minSelectableDate() {
+    const date = new Date();
+    date.setDate(date.getDate() - 29);
+    return this.toIsoLocalDate(date);
+  }
+
+  formatDateDa(dateString) {
+    if (!dateString) return '?';
+    const [year, month, day] = String(dateString).split('-');
+    if (!year || !month || !day) return dateString;
+    return `${day}/${month}/${year}`;
+  }
+
+  rangeLabel(range) {
+    const labels = {
+      today: 'I dag',
+      yesterday: 'I går',
+      custom: 'Valgt dag',
+    };
+    return labels[range] || range;
+  }
+
+  getPresetDate(preset) {
+    const today = new Date();
+    if (preset === 'yesterday') {
+      today.setDate(today.getDate() - 1);
+    }
+    return this.toIsoLocalDate(today);
+  }
+
+  getSelectedWindow() {
+    if (!this._selectedDate || !this._period) return null;
+
+    const [year, month, day] = this._selectedDate.split('-').map(Number);
+    const start = new Date(year, month - 1, day, this._fromHour, 0, 0, 0);
+    const end = new Date(year, month - 1, day, this._toHour, 0, 0, 0);
+    const periodStart = this._period.start_timestamp;
+    const periodEnd = this._period.end_timestamp;
+
+    return {
+      startTimestamp: Math.max(start.getTime() / 1000, periodStart),
+      endTimestamp: Math.min(end.getTime() / 1000, periodEnd),
+    };
+  }
+
+  formatHourLabel(hour) {
+    return `${String(hour).padStart(2, '0')}:00`;
+  }
+
+  applyTimeRange() {
+    if (this._fromHour >= this._toHour) {
+      this.showError('Fra tid skal være tidligere end til tid');
+      return;
+    }
+
+    if (this._config.sensor === 'defrost' || this._config.sensor === 'aux_heating') {
+      this.updateDefrostOnly();
+    } else {
+      this.updateChart();
+    }
+  }
+
+  setFromHour(hour) {
+    this._fromHour = hour;
+    this.render();
+    this.applyTimeRange();
+  }
+
+  setToHour(hour) {
+    this._toHour = hour;
+    this.render();
+    this.applyTimeRange();
+  }
   
   setConfig(config) {
     this._config = config;
+    this._selectedPreset = config?.default_preset || 'today';
+    this._selectedDate = config?.selected_date || this.getPresetDate(this._selectedPreset);
     this.render();
   }
 
@@ -60,88 +152,97 @@ class HistoryCard extends HTMLElement {
 
   async loadHistoryData() {
     if (!this._config || !this._config.sensor) {
-      console.log('❌ History card: No config or sensor');
       return;
     }
-    
-    console.log(`📊 Loading history for sensor: ${this._config.sensor}`);
-    
-    // Special handling for defrost and aux_heating sensors (binary/timeline view)
-    if (this._config.sensor === 'defrost' || this._config.sensor === 'aux_heating') {
-      try {
-        const response = await fetch(`/api/history/${this._config.sensor}`);
-        if (response.ok) {
-          const data = await response.json();
-          this._defrostData = data.data || [];
-          this.updateDefrostOnly();
-        } else {
-          this.showNoData();
-        }
-      } catch (err) {
-        console.error(`❌ Failed to load ${this._config.sensor} history:`, err);
-        this.showError(err.message);
-      }
+
+    if (!this._selectedDate) {
+      this.showError('Vælg en gyldig dato');
       return;
     }
+
+    this._period = null;
+    this._fullData = null;
+    this._defrostData = null;
     
     try {
-      const url = `/api/history/${encodeURIComponent(this._config.sensor)}`;
-      console.log(`🌐 Fetching: ${url}`);
-      
+      const url = `/api/history/${encodeURIComponent(this._config.sensor)}?date=${encodeURIComponent(this._selectedDate)}`;
       const response = await fetch(url);
-      console.log(`📥 Response status: ${response.status}`);
-      
       const data = await response.json();
-      console.log(`📦 Response data:`, data);
-      
-      if (data.data && data.data.length > 0) {
-        console.log(`✅ Got ${data.data.length} data points`);
-        this._fullData = data.data; // Store full dataset
-        
-        // Also fetch defrost history for evaporator sensor
-        if (this._config.sensor === 'evaporator_temp') {
-          const defrostResponse = await fetch('/api/history/defrost');
-          if (defrostResponse.ok) {
-            const defrostData = await defrostResponse.json();
-            this._defrostData = defrostData.data || [];
-          }
-        }
-        
-        this.updateChart();
-      } else {
-        console.log(`⚠️ No data available`);
-        this.showNoData();
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to load history');
       }
+
+      this._period = data.period || null;
+
+      if (this._config.sensor === 'defrost' || this._config.sensor === 'aux_heating') {
+        this._defrostData = data.data || [];
+        this.updateDefrostOnly();
+        return;
+      }
+
+      this._fullData = data.data || [];
+
+      if (this._config.sensor === 'evaporator_temp') {
+        const defrostUrl = `/api/history/defrost?date=${encodeURIComponent(this._selectedDate)}`;
+        const defrostResponse = await fetch(defrostUrl);
+        if (defrostResponse.ok) {
+          const defrostData = await defrostResponse.json();
+          this._defrostData = defrostData.data || [];
+        }
+      }
+
+      this.updateChart();
     } catch (err) {
-      console.error("❌ Failed to load history:", err);
       this.showError(err.message);
     }
   }
   
   updateDefrostOnly() {
     if (!this._defrostData) return;
-    
-    const now = Date.now() / 1000;
-    const cutoff = now - (this._timeSpan * 3600);
-    this.renderDefrostTimeline(cutoff, now);
+
+    const selectedWindow = this.getSelectedWindow();
+    const startTime = selectedWindow?.startTimestamp;
+    const endTime = selectedWindow?.endTimestamp;
+    if (!startTime || !endTime) {
+      this.showNoData();
+      return;
+    }
+
+    if (startTime >= endTime) {
+      this.showError('Fra tid skal være tidligere end til tid');
+      return;
+    }
+
+    this.renderDefrostTimeline(startTime, endTime);
   }
   
   updateChart() {
-    if (!this._fullData) return;
-    
-    // Filter data based on selected time span
-    const now = Date.now() / 1000;
-    const cutoff = now - (this._timeSpan * 3600); // Convert hours to seconds
-    const filteredData = this._fullData.filter(point => point.timestamp >= cutoff);
-    
-    if (filteredData.length > 0) {
-      this.renderChart(filteredData);
-      // Show defrost timeline for evaporator
-      if (this._config.sensor === 'evaporator_temp' && this._defrostData) {
-        this.renderDefrostTimeline(cutoff, now);
-      }
-    } else {
+    if (!this._fullData || this._fullData.length === 0) {
       this.showNoData();
+      return;
+    }
+
+    const selectedWindow = this.getSelectedWindow();
+    const startTime = selectedWindow?.startTimestamp;
+    const endTime = selectedWindow?.endTimestamp;
+    if (!startTime || !endTime || startTime >= endTime) {
+      this.showError('Fra tid skal være tidligere end til tid');
+      return;
+    }
+
+    const filteredData = this._fullData.filter(point =>
+      point.timestamp >= startTime && point.timestamp <= endTime
+    );
+
+    if (filteredData.length === 0) {
+      this.showNoData();
+      return;
+    }
+
+    this.renderChart(filteredData);
+    if (this._config.sensor === 'evaporator_temp' && this._defrostData && this._period) {
+      this.renderDefrostTimeline(startTime, endTime);
     }
   }
   
@@ -156,7 +257,7 @@ class HistoryCard extends HTMLElement {
     
     const duration = endTime - startTime;
     
-    // Filter defrost data to selected time span
+    // Filter defrost data to selected date window
     const filteredDefrost = this._defrostData.filter(point => 
       point.timestamp >= startTime && point.timestamp <= endTime
     );
@@ -253,8 +354,7 @@ class HistoryCard extends HTMLElement {
       padding-right: 12px;
     `;
     
-    // Generate time labels - match chart's maxTicksLimit of 12
-    const numLabels = Math.min(12, Math.max(2, Math.ceil(this._timeSpan)));
+    const numLabels = 8;
     
     for (let i = 0; i < numLabels; i++) {
       const timestamp = startTime + (duration * i / (numLabels - 1));
@@ -269,31 +369,19 @@ class HistoryCard extends HTMLElement {
     timelineContainer.appendChild(labelsDiv);
   }
   
-  setTimeSpan(hours) {
-    this._timeSpan = hours;
-    // Update active button styling
-    this.querySelectorAll('.time-span-btn').forEach(btn => {
-      const isActive = parseInt(btn.dataset.hours) === hours;
-      btn.classList.toggle('active', isActive);
-      
-      // Update inline styles
-      if (isActive) {
-        btn.style.background = '#2b7bd3';
-        btn.style.borderColor = '#2b7bd3';
-        btn.style.color = 'white';
-      } else {
-        btn.style.background = 'white';
-        btn.style.borderColor = '#ddd';
-        btn.style.color = '#333';
-      }
-    });
-    
-    // Update chart or defrost timeline
-    if (this._config.sensor === 'defrost' || this._config.sensor === 'aux_heating') {
-      this.updateDefrostOnly();
-    } else {
-      this.updateChart();
-    }
+  setPreset(preset) {
+    this._selectedPreset = preset;
+    this._selectedDate = this.getPresetDate(preset);
+    this.render();
+    this.loadHistoryData();
+  }
+
+  setSelectedDate(value) {
+    if (!value) return;
+    this._selectedPreset = 'custom';
+    this._selectedDate = value;
+    this.render();
+    this.loadHistoryData();
   }
 
   render() {
@@ -303,12 +391,35 @@ class HistoryCard extends HTMLElement {
     this.innerHTML = `
       <ha-card>
         <div class="history-card">
-          <div class="history-card__controls" style="padding: 8px 16px; display: flex; gap: 8px; justify-content: center; border-bottom: 1px solid rgba(0,0,0,0.1);">
-            <button class="time-span-btn" data-hours="1" style="padding: 4px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 12px;">1h</button>
-            <button class="time-span-btn" data-hours="3" style="padding: 4px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 12px;">3h</button>
-            <button class="time-span-btn" data-hours="6" style="padding: 4px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 12px;">6h</button>
-            <button class="time-span-btn" data-hours="12" style="padding: 4px 12px; border: 1px solid #ddd; background: white; border-radius: 4px; cursor: pointer; font-size: 12px;">12h</button>
-            <button class="time-span-btn active" data-hours="24" style="padding: 4px 12px; border: 1px solid #2b7bd3; background: #2b7bd3; color: white; border-radius: 4px; cursor: pointer; font-size: 12px;">24h</button>
+          <div class="history-card__controls" style="padding: 10px 16px; display: grid; gap: 10px; border-bottom: 1px solid rgba(0,0,0,0.1);">
+            <div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;">
+              ${['today', 'yesterday'].map(preset => {
+                const active = preset === this._selectedPreset;
+                return `<button class="history-preset-btn ${active ? 'active' : ''}" data-preset="${preset}" style="padding: 6px 10px; border: 1px solid ${active ? '#2b7bd3' : '#ddd'}; background: ${active ? '#2b7bd3' : 'white'}; color: ${active ? 'white' : '#333'}; border-radius: 999px; cursor: pointer; font-size: 12px;">${this.rangeLabel(preset)}</button>`;
+              }).join('')}
+            </div>
+            <div style="display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <label style="display: grid; gap: 4px; color: #666; font-size: 12px;">
+                <span>Vælg dag</span>
+                <input type="date" class="history-date-input" value="${this._selectedDate}" min="${this.minSelectableDate()}" max="${this.todayLocalIso()}" style="padding: 8px 10px; border: 1px solid #ddd; background: white; color: #333; border-radius: 6px;" />
+              </label>
+              <div style="font-size: 12px; color: #666;">${this.rangeLabel(this._selectedPreset)}: ${this.formatDateDa(this._selectedDate)}</div>
+            </div>
+            <div style="display: flex; justify-content: center; align-items: end; gap: 10px; flex-wrap: wrap;">
+              <label style="display: grid; gap: 4px; color: #666; font-size: 12px;">
+                <span>Fra tid</span>
+                <select class="history-from-hour" style="padding: 8px 10px; border: 1px solid #ddd; background: white; color: #333; border-radius: 6px;">
+                  ${Array.from({ length: 24 }, (_, hour) => `<option value="${hour}" ${hour === this._fromHour ? 'selected' : ''}>${this.formatHourLabel(hour)}</option>`).join('')}
+                </select>
+              </label>
+              <label style="display: grid; gap: 4px; color: #666; font-size: 12px;">
+                <span>Til tid</span>
+                <select class="history-to-hour" style="padding: 8px 10px; border: 1px solid #ddd; background: white; color: #333; border-radius: 6px;">
+                  ${Array.from({ length: 24 }, (_, index) => index + 1).map(hour => `<option value="${hour}" ${hour === this._toHour ? 'selected' : ''}>${hour === 24 ? '24:00' : this.formatHourLabel(hour)}</option>`).join('')}
+                </select>
+              </label>
+              <div style="font-size: 12px; color: #666; min-width: 120px;">${this.formatHourLabel(this._fromHour)} → ${this._toHour === 24 ? '24:00' : this.formatHourLabel(this._toHour)}</div>
+            </div>
           </div>
           ${isDefrostOnly ? `
           <div class="history-card__defrost-timeline" id="defrost-timeline-${this._config.sensor}" style="padding: 40px 16px; position: relative;">
@@ -346,35 +457,36 @@ class HistoryCard extends HTMLElement {
       </ha-card>
     `;
     
-    // Add click handlers to buttons
-    this.querySelectorAll('.time-span-btn').forEach(btn => {
-      btn.onclick = () => this.setTimeSpan(parseInt(btn.dataset.hours));
-      // Add hover effect
-      btn.onmouseenter = (e) => {
-        if (!e.target.classList.contains('active')) {
-          e.target.style.background = '#f5f5f5';
-        }
-      };
-      btn.onmouseleave = (e) => {
-        if (!e.target.classList.contains('active')) {
-          e.target.style.background = 'white';
-        }
-      };
+    this.querySelectorAll('.history-preset-btn').forEach(btn => {
+      btn.onclick = () => this.setPreset(btn.dataset.preset);
     });
-    
-    // Style active button
-    const activeBtn = this.querySelector('.time-span-btn.active');
-    if (activeBtn) {
-      activeBtn.style.background = '#2b7bd3';
-      activeBtn.style.borderColor = '#2b7bd3';
-      activeBtn.style.color = 'white';
+
+    const dateInput = this.querySelector('.history-date-input');
+    if (dateInput) {
+      dateInput.onchange = () => this.setSelectedDate(dateInput.value);
+    }
+
+    const fromHourInput = this.querySelector('.history-from-hour');
+    if (fromHourInput) {
+      fromHourInput.onchange = () => this.setFromHour(parseInt(fromHourInput.value, 10));
+    }
+
+    const toHourInput = this.querySelector('.history-to-hour');
+    if (toHourInput) {
+      toHourInput.onchange = () => this.setToHour(parseInt(toHourInput.value, 10));
     }
   }
 
   showNoData() {
     const canvas = this.querySelector("canvas");
     if (canvas) {
-      canvas.parentElement.innerHTML = '<div style="padding: 40px; text-align: center; color: #999;">No history data available yet. Data is collected every 60 seconds.</div>';
+      canvas.parentElement.innerHTML = '<div style="padding: 40px; text-align: center; color: #999;">Ingen historik for den valgte dag endnu. Data gemmes hvert 60. sekund.</div>';
+      return;
+    }
+
+    const timeline = this.querySelector(`#defrost-timeline-${this._config.sensor}`);
+    if (timeline) {
+      timeline.innerHTML = '<div style="padding: 20px; text-align: center; color: #999;">Ingen historik for den valgte dag endnu.</div>';
     }
   }
 
@@ -382,6 +494,12 @@ class HistoryCard extends HTMLElement {
     const canvas = this.querySelector("canvas");
     if (canvas) {
       canvas.parentElement.innerHTML = `<div style="padding: 40px; text-align: center; color: #f44336;">Error: ${message}</div>`;
+      return;
+    }
+
+    const timeline = this.querySelector(`#defrost-timeline-${this._config.sensor}`);
+    if (timeline) {
+      timeline.innerHTML = `<div style="padding: 20px; text-align: center; color: #f44336;">Error: ${message}</div>`;
     }
   }
 
@@ -463,7 +581,7 @@ class HistoryCard extends HTMLElement {
           x: {
             title: { 
               display: true, 
-              text: `Time (${this._timeSpan}h)`,
+              text: `Tid (${this.formatDateDa(this._selectedDate)} ${this.formatHourLabel(this._fromHour)}-${this._toHour === 24 ? '24:00' : this.formatHourLabel(this._toHour)})`,
               color: '#444'
             },
             grid: { color: 'rgba(0,0,0,0.04)' },

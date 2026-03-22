@@ -1,0 +1,18 @@
+[Unit]
+Description=DVI Bridge Cloudflare Tunnel
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=dviha
+ExecStartPre=/usr/bin/test -f /home/dviha/dvi-bridge/cloudflared/config.yml
+ExecStart=/usr/local/bin/cloudflared tunnel --config /home/dviha/dvi-bridge/cloudflared/config.yml --metrics 127.0.0.1:20080 run
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

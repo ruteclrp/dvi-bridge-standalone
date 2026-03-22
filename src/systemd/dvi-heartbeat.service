@@ -1,0 +1,10 @@
+[Unit]
+Description=DVI Bridge heartbeat sender
+After=dvi-tunnels-ready.service
+Wants=dvi-tunnels-ready.service
+
+[Service]
+Type=oneshot
+User=dviha
+WorkingDirectory=/home/dviha/dvi-bridge
+ExecStart=/home/dviha/dvi-bridge/venv/bin/python /home/dviha/dvi-bridge/sidecar/heartbeat.py

@@ -12,6 +12,8 @@ import glob
 import subprocess
 import socket  # <-- nødvendig til _get_default_gateway_linux
 import tempfile
+from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 # Find STM32 Virtual COM Port automatically
@@ -32,8 +34,118 @@ STATIC_VALUES_SCRIPT = os.path.join(SCRIPT_DIR, "read_static_values_modbustk.py"
 
 # History tracking
 HISTORY_FILE = os.path.join(SCRIPT_DIR, "sensor_history.json")
-HISTORY_MAX_AGE = 86400  # 24 hours in seconds
+HISTORY_MAX_AGE = 30 * 86400  # 30 days in seconds
+HISTORY_HIGH_RES_AGE = 48 * 3600  # Keep full 15-second samples for 48 hours
+HISTORY_DOWNSAMPLED_INTERVAL = 60  # Older data is compacted to 60-second buckets
 HISTORY_SAMPLE_INTERVAL = 15  # Sample every 15 seconds
+USAGE_DAILY_FILE = os.path.join(SCRIPT_DIR, "meter_usage_daily.json")
+USAGE_DAILY_RETENTION_DAYS = 400
+
+BRIDGE_BASE = Path("/home/dviha/dvi-bridge")
+OPEN_REQUEST_FILE = BRIDGE_BASE / "open_request.json"
+OPEN_CONFIRM_FILE = BRIDGE_BASE / "open_confirm.json"
+OPEN_CLOSE_FILE = BRIDGE_BASE / "open_close.json"
+OPEN_REQUEST_TTL = int(os.getenv("OPEN_REQUEST_TTL", "900"))
+OPEN_CONFIRM_TTL = 15 * 60
+
+
+def _read_open_request() -> dict:
+    if not OPEN_REQUEST_FILE.exists():
+        return {"pending": False}
+    try:
+        payload = json.loads(OPEN_REQUEST_FILE.read_text())
+        payload["pending"] = bool(payload.get("pending"))
+        requested_at = payload.get("requested_at")
+        if payload["pending"] and requested_at:
+            expires_at = int(requested_at) + OPEN_REQUEST_TTL
+            if int(time.time()) >= expires_at:
+                OPEN_REQUEST_FILE.unlink(missing_ok=True)
+                return {"pending": False, "expired": True}
+        return payload
+    except Exception:
+        return {"pending": False}
+
+
+def _read_open_confirm() -> dict:
+    if not OPEN_CONFIRM_FILE.exists():
+        return {"confirmed": False}
+    try:
+        payload = json.loads(OPEN_CONFIRM_FILE.read_text())
+        confirmed_at = payload.get("confirmed_at")
+        if not confirmed_at:
+            return {"confirmed": False}
+        expires_at = int(confirmed_at) + OPEN_CONFIRM_TTL
+        if int(time.time()) >= expires_at:
+            OPEN_CONFIRM_FILE.unlink(missing_ok=True)
+            return {"confirmed": False, "expired": True}
+        return {
+            "confirmed": True,
+            "confirmed_at": int(confirmed_at),
+            "expires_at": expires_at,
+        }
+    except Exception:
+        return {"confirmed": False}
+
+
+def _clear_open_request() -> None:
+    try:
+        if OPEN_REQUEST_FILE.exists():
+            OPEN_REQUEST_FILE.unlink()
+    except Exception:
+        return
+
+
+def _get_pump_id() -> str:
+    if PUMP_ID:
+        return f"pump-{PUMP_ID}"
+    return "pump-unknown"
+
+
+def _write_open_confirm(pump_id: str | None) -> None:
+    payload = {
+        "pump_id": pump_id or _get_pump_id(),
+        "confirmed_at": int(time.time()),
+    }
+    try:
+        OPEN_CONFIRM_FILE.parent.mkdir(parents=True, exist_ok=True)
+        OPEN_CONFIRM_FILE.write_text(json.dumps(payload))
+        _clear_open_request()
+    except Exception:
+        return
+
+
+def _write_open_close(pump_id: str | None) -> None:
+    payload = {
+        "pump_id": pump_id or _get_pump_id(),
+        "closed_at": int(time.time()),
+    }
+    try:
+        OPEN_CLOSE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        OPEN_CLOSE_FILE.write_text(json.dumps(payload))
+        OPEN_CONFIRM_FILE.unlink(missing_ok=True)
+        _clear_open_request()
+    except Exception:
+        return
+
+
+def _build_open_request_payload() -> dict:
+    open_request = _read_open_request()
+    open_confirm = _read_open_confirm()
+    status = "off"
+    if open_request.get("pending"):
+        status = "pending"
+    elif open_confirm.get("confirmed"):
+        status = "confirmed"
+    state = "on" if status in {"pending", "confirmed"} else "off"
+    payload = {
+        "state": state,
+        "status": status,
+    }
+    if open_request.get("requested_at"):
+        payload["requested_at"] = open_request.get("requested_at")
+    if open_confirm.get("expires_at"):
+        payload["confirmed_until"] = open_confirm.get("expires_at")
+    return payload
 
 def _refresh_static_values() -> None:
     if not os.path.isfile(STATIC_VALUES_SCRIPT):
@@ -59,6 +171,7 @@ def _refresh_static_values() -> None:
         print(f"⚠️ Failed to run read_static_values_modbustk.py: {e}")
 
 STATE_PATH = "./state.json"
+STATE_FILE_MODE = 0o644
 
 def write_state_atomic(state: dict) -> None:
     """
@@ -80,8 +193,11 @@ def write_state_atomic(state: dict) -> None:
         os.fsync(tmp.fileno())
         temp_name = tmp.name
 
+    os.chmod(temp_name, STATE_FILE_MODE)
+
     # Atomic replace on POSIX
     os.replace(temp_name, STATE_PATH)
+    os.chmod(STATE_PATH, STATE_FILE_MODE)
 
 def _ensure_pump_id() -> Optional[str]:
     _refresh_static_values()
@@ -215,6 +331,31 @@ def publish_discovery_binary(name, unique_id, coil_key, device_class=None):
     }
     if device_class:
         payload["device_class"] = device_class
+    mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
+
+
+def publish_discovery_binary_template(
+    name,
+    unique_id,
+    value_template,
+    json_attributes_topic=None,
+    json_attributes_template=None,
+    device_class=None,
+):
+    config_topic = f"homeassistant/binary_sensor/{unique_id}/config"
+    payload = {
+        "name": name,
+        "state_topic": "dvi/measurement",
+        "value_template": value_template,
+        "unique_id": unique_id,
+        "device": _build_device_info(),
+    }
+    if device_class:
+        payload["device_class"] = device_class
+    if json_attributes_topic:
+        payload["json_attributes_topic"] = json_attributes_topic
+    if json_attributes_template:
+        payload["json_attributes_template"] = json_attributes_template
     mqtt_client.publish(config_topic, json.dumps(payload), retain=True)
 
 def publish_discovery_number(name, unique_id, command_topic, state_template,
@@ -445,6 +586,7 @@ command_map = {
 #    "dvi/command/outdoorcal": {"register": 0x18D, "scale": 1}, 
     "dvi/command/curveset-12": {"dynamic_curve": "-12", "scale": 1},
     "dvi/command/curveset12": {"dynamic_curve": "12", "scale": 1},
+    "dvi/command/open_request": {"special": "open_request"},
 }
 
 # Map string payloads from HA selects to numeric register values
@@ -466,6 +608,19 @@ def on_message(client, userdata, msg):
         payload_str = msg.payload.decode().strip()
         cfg = command_map.get(topic)
         if not cfg:
+            return
+
+        if cfg.get("special") == "open_request":
+            action = payload_str.strip().lower()
+            if action == "confirm":
+                _write_open_confirm(_get_pump_id())
+                print("✅ Open request confirmed via MQTT")
+                return
+            if action == "close":
+                _write_open_close(_get_pump_id())
+                print("✅ Open request closed via MQTT")
+                return
+            print(f"⚠️ Unknown open_request action: {payload_str}")
             return
 
         # Handle HA Select payloads (e.g. "Off", "On", "Automatic")
@@ -511,13 +666,30 @@ def load_history():
             pass
     return {}
 
-def prune_old_data(history, cutoff_time):
-    """Remove data points older than 24 hours"""
+def _compact_sensor_history(points, cutoff_time, high_res_cutoff):
+    filtered_points = []
+    compacted_buckets = {}
+
+    for point in sorted(points, key=lambda item: item.get("timestamp", 0)):
+        timestamp = point.get("timestamp")
+        if timestamp is None or timestamp <= cutoff_time:
+            continue
+
+        if timestamp > high_res_cutoff:
+            filtered_points.append(point)
+            continue
+
+        bucket = int(timestamp // HISTORY_DOWNSAMPLED_INTERVAL)
+        compacted_buckets[bucket] = point
+
+    older_points = [compacted_buckets[key] for key in sorted(compacted_buckets.keys())]
+    return older_points + filtered_points
+
+
+def prune_old_data(history, cutoff_time, high_res_cutoff):
+    """Remove expired points and compact older retained history to 60-second buckets."""
     for sensor in history:
-        history[sensor] = [
-            point for point in history[sensor]
-            if point["timestamp"] > cutoff_time
-        ]
+        history[sensor] = _compact_sensor_history(history[sensor], cutoff_time, high_res_cutoff)
     return history
 
 def save_history_sample(sensors_dict):
@@ -525,6 +697,7 @@ def save_history_sample(sensors_dict):
     history = load_history()
     current_time = time.time()
     cutoff_time = current_time - HISTORY_MAX_AGE
+    high_res_cutoff = current_time - HISTORY_HIGH_RES_AGE
     
     # Add new samples (only VV temp for now)
     for sensor_name, value in sensors_dict.items():
@@ -536,7 +709,7 @@ def save_history_sample(sensors_dict):
         })
     
     # Prune old data
-    history = prune_old_data(history, cutoff_time)
+    history = prune_old_data(history, cutoff_time, high_res_cutoff)
     
     # Atomic write
     history_dir = os.path.dirname(os.path.abspath(HISTORY_FILE))
@@ -544,6 +717,115 @@ def save_history_sample(sensors_dict):
         json.dump(history, tmp)
         tmp_path = tmp.name
     os.replace(tmp_path, HISTORY_FILE)
+
+def _safe_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+def _safe_int(value):
+    try:
+        return int(round(float(value)))
+    except (TypeError, ValueError):
+        return None
+
+def _safe_energy(value):
+    try:
+        return round(float(value), 1)
+    except (TypeError, ValueError):
+        return None
+
+def load_daily_usage_history():
+    """Load daily meter snapshots keyed by date (YYYY-MM-DD)."""
+    if os.path.exists(USAGE_DAILY_FILE):
+        try:
+            with open(USAGE_DAILY_FILE, "r") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+    return {}
+
+def save_daily_usage_snapshot(last_inputs, last_writes, now_ts=None):
+    """Persist daily cumulative meter snapshots (first + hourly latest)."""
+    if now_ts is None:
+        now_ts = time.time()
+
+    snapshot = {
+        "comp_hours": _safe_int(last_writes.get("comp_hours")),
+        "vv_hours": _safe_int(last_writes.get("vv_hours")),
+        "heating_hours": _safe_int(last_writes.get("heating_hours")),
+        "em23_energy": _safe_energy(last_inputs.get("em23_energy")),
+    }
+
+    if all(v is None for v in snapshot.values()):
+        return
+
+    now_dt = datetime.fromtimestamp(now_ts)
+    date_key = now_dt.strftime("%Y-%m-%d")
+    usage_history = load_daily_usage_history()
+    existing = usage_history.get(date_key)
+
+    # Backward compatibility: convert legacy flat format to nested first/latest format
+    if isinstance(existing, dict) and "first" not in existing and "latest" not in existing:
+        existing = {
+            "first": {
+                "comp_hours": _safe_int(existing.get("comp_hours")),
+                "vv_hours": _safe_int(existing.get("vv_hours")),
+                "heating_hours": _safe_int(existing.get("heating_hours")),
+                "em23_energy": _safe_energy(existing.get("em23_energy")),
+            },
+            "latest": {
+                "comp_hours": _safe_int(existing.get("comp_hours")),
+                "vv_hours": _safe_int(existing.get("vv_hours")),
+                "heating_hours": _safe_int(existing.get("heating_hours")),
+                "em23_energy": _safe_energy(existing.get("em23_energy")),
+            },
+            "updated_at": int(existing.get("updated_at") or now_ts),
+            "hourly": {},
+        }
+
+    if not isinstance(existing, dict) or "first" not in existing or "latest" not in existing:
+        usage_history[date_key] = {
+            "first": dict(snapshot),
+            "latest": dict(snapshot),
+            "updated_at": int(now_ts),
+            "hourly": {now_dt.strftime("%H"): dict(snapshot)},
+        }
+    else:
+        # Update latest at most once per hour to avoid high write frequency
+        updated_at = existing.get("updated_at")
+        should_update_latest = True
+        if updated_at:
+            try:
+                prev_dt = datetime.fromtimestamp(int(updated_at))
+                should_update_latest = prev_dt.strftime("%Y-%m-%d-%H") != now_dt.strftime("%Y-%m-%d-%H")
+            except Exception:
+                should_update_latest = True
+
+        if should_update_latest:
+            existing["latest"] = dict(snapshot)
+            existing["updated_at"] = int(now_ts)
+            hourly = existing.get("hourly") if isinstance(existing.get("hourly"), dict) else {}
+            hourly[now_dt.strftime("%H")] = dict(snapshot)
+            existing["hourly"] = hourly
+
+        usage_history[date_key] = existing
+
+    # Keep only newest N days
+    sorted_dates = sorted(usage_history.keys())
+    if len(sorted_dates) > USAGE_DAILY_RETENTION_DAYS:
+        dates_to_remove = sorted_dates[: len(sorted_dates) - USAGE_DAILY_RETENTION_DAYS]
+        for d in dates_to_remove:
+            usage_history.pop(d, None)
+
+    usage_dir = os.path.dirname(os.path.abspath(USAGE_DAILY_FILE))
+    with tempfile.NamedTemporaryFile(mode="w", dir=usage_dir, delete=False) as tmp:
+        json.dump(usage_history, tmp)
+        tmp_path = tmp.name
+    os.replace(tmp_path, USAGE_DAILY_FILE)
 
 def process_file_commands():
     """Read commands.json, execute all select and number commands, remove processed"""
@@ -687,6 +969,14 @@ def publish_all_discovery() -> None:
             unique_id=f"dvi_coil_{idx}",
             coil_key=label
         )
+
+    publish_discovery_binary_template(
+        name="Open request",
+        unique_id="dvi_open_request",
+        value_template="{{ 'ON' if value_json.open_request and value_json.open_request.state == 'on' else 'OFF' }}",
+        json_attributes_topic="dvi/measurement",
+        json_attributes_template="{{ value_json.open_request | default({}) | tojson }}",
+    )
 
     # FC04 sensors -> temperature sensors
     for key, label in active_fc04.items():
@@ -1213,7 +1503,7 @@ while True:
 
         last_misc_update = now
 
-    # Sample sensor history every 60 seconds (all temperature sensors)
+    # Sample sensor history every 15 seconds; older data is compacted after 48 hours.
     if now - last_history_sample >= HISTORY_SAMPLE_INTERVAL:
         # Build history sensors dict based on available sensors
         history_sensors = {}
@@ -1241,6 +1531,9 @@ while True:
                 for k, v in history_sensors.items()
             ])
             print(f"📊 History sample: {sensor_list}")
+
+        # Persist daily cumulative meter snapshots for usage popup summaries
+        save_daily_usage_snapshot(last_inputs, last_writes, now)
         last_history_sample = now
 
     # Final payload from cached values
@@ -1249,6 +1542,7 @@ while True:
         "input_registers": dict(sorted(last_inputs.items())),
         "write_registers": dict(sorted(last_writes.items()))
     }
+    full_payload["open_request"] = _build_open_request_payload()
     # Eksponér pumpid, pump_type, SW-versioner + install/service date i measurement payload
     if PUMP_TYPE:
         full_payload["pump_type"] = PUMP_TYPE

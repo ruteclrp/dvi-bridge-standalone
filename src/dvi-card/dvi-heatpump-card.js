@@ -9,6 +9,8 @@ class DviHeatpumpCard extends HTMLElement {
 		super();
 		this._heatCurveConfigKey = "";
 		this._pumpType = "AW"; // Default to AW
+		this._alarmLatched = false;
+		this._alarmWasActive = false;
 	}
 
 	async _fetchPumpType() {
@@ -68,8 +70,15 @@ class DviHeatpumpCard extends HTMLElement {
         <div class="header" id="card-header"></div>
         <div class="mode-chips-bar" id="mode-chips-bar"></div>
         <div class="diagram" id="diagram"></div>
+				<div class="alarm-overlay" id="alarm-overlay" aria-hidden="true">
+					<div class="alarm-overlay__popup" role="alert" aria-live="assertive">
+						<div class="alarm-overlay__text">ALARM</div>
+						<button class="alarm-overlay__ack" id="alarm-ack" type="button">Acknowledge</button>
+					</div>
+				</div>
       </ha-card>
     `;
+		this._bindAlarmControls();
 		this._updateHeader();
 		this._fetchPumpType(); // Try to fetch pump type after config is set
 	}
@@ -101,12 +110,78 @@ class DviHeatpumpCard extends HTMLElement {
 			pumpType: this._pumpType,
 		});
 
-		diagram.innerHTML = view.diagramHtml;
-		modeChipsBar.innerHTML = view.chipsHtml;
+		syncMarkup(diagram, view.diagramHtml);
+		syncMarkup(modeChipsBar, view.chipsHtml);
 		bindHistoryHooks(diagram, view.stateEntityMap, this);
 		bindIconHooks(diagram, view.iconEntityMap, this);
 		wireModeChips(modeChipsBar, this._hass, view.chipGroups);
 		this._bindHeatCurveTrigger(modeChipsBar);
+		this._renderAlarmOverlay();
+	}
+
+	_renderAlarmOverlay() {
+		const overlay = this._root?.getElementById("alarm-overlay");
+		if (!overlay) return;
+
+		const active = this._isSumAlarmActive();
+		if (active && !this._alarmWasActive) {
+			this._alarmLatched = true;
+		}
+
+		this._alarmWasActive = active;
+		this._setAlarmOverlayVisible(this._alarmLatched);
+	}
+
+	_setAlarmOverlayVisible(visible) {
+		const overlay = this._root?.getElementById("alarm-overlay");
+		if (!overlay) return;
+
+		overlay.classList.toggle("alarm-overlay--active", visible);
+		overlay.setAttribute("aria-hidden", visible ? "false" : "true");
+	}
+
+	_bindAlarmControls() {
+		const acknowledgeButton = this._root?.getElementById("alarm-ack");
+		if (!acknowledgeButton) return;
+
+		acknowledgeButton.onclick = async () => {
+			this._alarmLatched = false;
+			this._setAlarmOverlayVisible(false);
+
+			if (!this._hass?.connection) {
+				try {
+					await fetch("/api/alarm/sumalarm/ack", { method: "POST" });
+					if (this._hass?.refresh) {
+						await this._hass.refresh();
+						this.hass = this._hass;
+					}
+				} catch (error) {
+					console.warn("Could not acknowledge sidecar alarm latch:", error);
+				}
+			}
+		};
+	}
+
+	_isSumAlarmActive() {
+		const entityId = this._resolveSumAlarmEntityId();
+		if (!entityId || !this._hass?.states?.[entityId]) return false;
+
+		const state = String(this._hass.states[entityId].state).toLowerCase();
+		return state === "on" || state === "1" || state === "true" || state === "alarm";
+	}
+
+	_resolveSumAlarmEntityId() {
+		const configuredEntityId = this._config?.sumalarm || this._config?.sum_alarm_failure;
+		if (configuredEntityId && this._hass?.states?.[configuredEntityId]) {
+			return configuredEntityId;
+		}
+
+		const stateIds = Object.keys(this._hass?.states || {});
+		return (
+			stateIds.find((entityId) => entityId.endsWith(".sum_alarm_failure")) ||
+			stateIds.find((entityId) => entityId.endsWith(".sumalarm")) ||
+			null
+		);
 	}
 
 	_bindHeatCurveTrigger(diagram) {
@@ -166,4 +241,75 @@ window.customCards.push({
 
 if (!customElements.get("dvi-heatpump-card")) {
 	customElements.define("dvi-heatpump-card", DviHeatpumpCard);
+}
+
+function syncMarkup(container, markup) {
+	const template = document.createElement("template");
+	template.innerHTML = markup;
+	morphChildNodes(container, template.content);
+}
+
+function morphChildNodes(currentParent, nextParent) {
+	const currentNodes = Array.from(currentParent.childNodes);
+	const nextNodes = Array.from(nextParent.childNodes);
+	const commonLength = Math.min(currentNodes.length, nextNodes.length);
+
+	for (let index = 0; index < commonLength; index += 1) {
+		morphNode(currentNodes[index], nextNodes[index]);
+	}
+
+	for (let index = commonLength; index < nextNodes.length; index += 1) {
+		currentParent.appendChild(nextNodes[index].cloneNode(true));
+	}
+
+	for (let index = currentNodes.length - 1; index >= nextNodes.length; index -= 1) {
+		currentNodes[index].remove();
+	}
+}
+
+function morphNode(currentNode, nextNode) {
+	if (!canMorphNode(currentNode, nextNode)) {
+		currentNode.replaceWith(nextNode.cloneNode(true));
+		return;
+	}
+
+	if (currentNode.nodeType === Node.TEXT_NODE) {
+		if (currentNode.nodeValue !== nextNode.nodeValue) {
+			currentNode.nodeValue = nextNode.nodeValue;
+		}
+		return;
+	}
+
+	if (!(currentNode instanceof Element) || !(nextNode instanceof Element)) {
+		return;
+	}
+
+	syncAttributes(currentNode, nextNode);
+	morphChildNodes(currentNode, nextNode);
+}
+
+function canMorphNode(currentNode, nextNode) {
+	if (currentNode.nodeType !== nextNode.nodeType) {
+		return false;
+	}
+
+	if (currentNode.nodeType === Node.TEXT_NODE) {
+		return true;
+	}
+
+	return currentNode.nodeName === nextNode.nodeName;
+}
+
+function syncAttributes(currentElement, nextElement) {
+	for (const attributeName of currentElement.getAttributeNames()) {
+		if (!nextElement.hasAttribute(attributeName)) {
+			currentElement.removeAttribute(attributeName);
+		}
+	}
+
+	for (const { name, value } of Array.from(nextElement.attributes)) {
+		if (currentElement.getAttribute(name) !== value) {
+			currentElement.setAttribute(name, value);
+		}
+	}
 }

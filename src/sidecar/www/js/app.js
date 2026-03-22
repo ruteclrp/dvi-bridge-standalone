@@ -214,10 +214,6 @@ function overrideTempSensorClicks(card, hass) {
       if (!dataKey || !mapping) {
         return;
       }
-      if (label._historyOverridden) {
-        return;
-      }
-      label._historyOverridden = true;
 
       label.onclick = e => {
         e.preventDefault();
@@ -239,8 +235,7 @@ function overrideTempSensorClicks(card, hass) {
     });
 
     const defrostIcon = diagram.querySelector('[data-icon-key="defrost"]');
-    if (defrostIcon && !defrostIcon._defrostOverridden) {
-      defrostIcon._defrostOverridden = true;
+    if (defrostIcon) {
       defrostIcon.classList.add("clickable");
       defrostIcon.onclick = e => {
         e.preventDefault();
@@ -259,8 +254,7 @@ function overrideTempSensorClicks(card, hass) {
 
     const auxIcons = diagram.querySelectorAll('[data-icon-key="aux"]');
     auxIcons.forEach(auxIcon => {
-      if (auxIcon && !auxIcon._auxOverridden) {
-        auxIcon._auxOverridden = true;
+      if (auxIcon) {
         auxIcon.classList.add("clickable");
         auxIcon.onclick = e => {
           e.preventDefault();

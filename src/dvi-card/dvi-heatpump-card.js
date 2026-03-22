@@ -110,8 +110,8 @@ class DviHeatpumpCard extends HTMLElement {
 			pumpType: this._pumpType,
 		});
 
-		diagram.innerHTML = view.diagramHtml;
-		modeChipsBar.innerHTML = view.chipsHtml;
+		syncMarkup(diagram, view.diagramHtml);
+		syncMarkup(modeChipsBar, view.chipsHtml);
 		bindHistoryHooks(diagram, view.stateEntityMap, this);
 		bindIconHooks(diagram, view.iconEntityMap, this);
 		wireModeChips(modeChipsBar, this._hass, view.chipGroups);
@@ -241,4 +241,75 @@ window.customCards.push({
 
 if (!customElements.get("dvi-heatpump-card")) {
 	customElements.define("dvi-heatpump-card", DviHeatpumpCard);
+}
+
+function syncMarkup(container, markup) {
+	const template = document.createElement("template");
+	template.innerHTML = markup;
+	morphChildNodes(container, template.content);
+}
+
+function morphChildNodes(currentParent, nextParent) {
+	const currentNodes = Array.from(currentParent.childNodes);
+	const nextNodes = Array.from(nextParent.childNodes);
+	const commonLength = Math.min(currentNodes.length, nextNodes.length);
+
+	for (let index = 0; index < commonLength; index += 1) {
+		morphNode(currentNodes[index], nextNodes[index]);
+	}
+
+	for (let index = commonLength; index < nextNodes.length; index += 1) {
+		currentParent.appendChild(nextNodes[index].cloneNode(true));
+	}
+
+	for (let index = currentNodes.length - 1; index >= nextNodes.length; index -= 1) {
+		currentNodes[index].remove();
+	}
+}
+
+function morphNode(currentNode, nextNode) {
+	if (!canMorphNode(currentNode, nextNode)) {
+		currentNode.replaceWith(nextNode.cloneNode(true));
+		return;
+	}
+
+	if (currentNode.nodeType === Node.TEXT_NODE) {
+		if (currentNode.nodeValue !== nextNode.nodeValue) {
+			currentNode.nodeValue = nextNode.nodeValue;
+		}
+		return;
+	}
+
+	if (!(currentNode instanceof Element) || !(nextNode instanceof Element)) {
+		return;
+	}
+
+	syncAttributes(currentNode, nextNode);
+	morphChildNodes(currentNode, nextNode);
+}
+
+function canMorphNode(currentNode, nextNode) {
+	if (currentNode.nodeType !== nextNode.nodeType) {
+		return false;
+	}
+
+	if (currentNode.nodeType === Node.TEXT_NODE) {
+		return true;
+	}
+
+	return currentNode.nodeName === nextNode.nodeName;
+}
+
+function syncAttributes(currentElement, nextElement) {
+	for (const attributeName of currentElement.getAttributeNames()) {
+		if (!nextElement.hasAttribute(attributeName)) {
+			currentElement.removeAttribute(attributeName);
+		}
+	}
+
+	for (const { name, value } of Array.from(nextElement.attributes)) {
+		if (currentElement.getAttribute(name) !== value) {
+			currentElement.setAttribute(name, value);
+		}
+	}
 }
